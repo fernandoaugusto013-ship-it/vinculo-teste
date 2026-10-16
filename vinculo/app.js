@@ -1,0 +1,1490 @@
+(() => {
+'use strict';
+/* =====================================================================
+   VÍNCULO — MVP de recrutamento e banco de talentos
+   Arquitetura em camadas (tudo no navegador, pronto para trocar por backend):
+   1. Utilidades
+   2. Domínio (constantes, regras)
+   3. Persistência  -> trocar por API + banco (Postgres/Supabase)
+   4. Serviços mock -> Auth, Mailer, WhatsApp, Calendar, FileStore, AI, Billing
+   5. Seed de demonstração
+   6. Views  7. Ações  8. Roteador
+   ===================================================================== */
+
+/* ---------- 1. Utilidades ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = p => p + Math.random().toString(36).slice(2, 9);
+const nowISO = () => new Date().toISOString();
+const dAgo = n => new Date(Date.now() - n * 864e5).toISOString();
+const dAhead = (n, h = 10) => { const d = new Date(Date.now() + n * 864e5); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+const brl = n => (n === '' || n == null || isNaN(n)) ? '—' : 'R$ ' + Number(n).toLocaleString('pt-BR');
+const fdate = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+const fdt = d => d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+const ago = d => { const n = Math.floor((Date.now() - new Date(d)) / 864e5); return n <= 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`; };
+const strip = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const initials = n => String(n).split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const hue = s => [...String(s)].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+const avatar = (name, size) => `<span class="av" style="--h:${hue(name)}${size ? `;width:${size}px;height:${size}px;font-size:${Math.round(size * .38)}px` : ''}">${esc(initials(name))}</span>`;
+const uniq = a => [...new Set(a)];
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+const IC = {
+  home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+  brief: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><path d="M16 4.5a3.5 3.5 0 010 7M18 14c2 .6 3.5 2.5 3.5 6"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/>',
+  board: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  bell: '<path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+  building: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  out: '<path d="M9 4H5a1 1 0 00-1 1v14a1 1 0 001 1h4"/><path d="M16 8l4 4-4 4M20 12H9"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/>',
+  monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  right: '<path d="M9 5l7 7-7 7"/>', menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  file: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+  lock: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>',
+  cal: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/>',
+  phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>',
+  pin: '<path d="M12 21s7-6 7-11a7 7 0 10-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  edit: '<path d="M4 20l1-4L16 5l3 3L8 19z"/>',
+  dots: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+  chart: '<path d="M4 20V4M4 20h16M8 16v-5M13 16V8M18 16v-8"/>',
+  link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
+  star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 17l-5.2 2.7 1-5.9L3.5 9.7l5.9-.8z"/>',
+  refresh: '<path d="M20 11a8 8 0 00-14-4L4 9M4 4v5h5M4 13a8 8 0 0014 4l2-2M20 20v-5h-5"/>'
+};
+const Theme = {
+  mem: null, key: 'vinculo_theme',
+  get() { let v = null; try { v = localStorage.getItem(this.key); } catch (e) { } v = v || this.mem; return v === 'light' || v === 'dark' ? v : 'auto'; },
+  eff() { const t = this.get(); if (t !== 'auto') return t; return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; },
+  apply() { const r = document.documentElement, t = this.get(); if (t === 'auto') { r.removeAttribute('data-theme'); r.style.colorScheme = ''; } else { r.setAttribute('data-theme', t); r.style.colorScheme = t; } },
+  set(v) { this.mem = v === 'auto' ? null : v; try { v === 'auto' ? localStorage.removeItem(this.key) : localStorage.setItem(this.key, v); } catch (e) { } this.apply(); }
+};
+Theme.apply();
+const ico = (n, s = 18) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n] || ''}</svg>`;
+const LOGO = `<svg viewBox="0 0 34 24" width="34" height="24" aria-hidden="true"><circle cx="12" cy="12" r="8.2" fill="none" stroke="var(--pri)" stroke-width="3.2"/><circle cx="22" cy="12" r="8.2" fill="none" stroke="var(--sun)" stroke-width="3.2"/></svg>`;
+
+/* ---------- 2. Domínio ---------- */
+const STAGES = [
+  { id: 'novo', name: 'Novos candidatos', short: 'Novo', c: '#3A6FD8' },
+  { id: 'triagem', name: 'Triagem', short: 'Triagem', c: '#7A5BD0' },
+  { id: 'entrevista_rh', name: 'Entrevista RH', short: 'Entrevista RH', c: '#D98A0B' },
+  { id: 'entrevista_cliente', name: 'Entrevista cliente', short: 'Entrevista cliente', c: '#C4487D' },
+  { id: 'aprovado', name: 'Aprovado', short: 'Aprovado', c: '#2E9E5B' },
+  { id: 'contratado', name: 'Contratado', short: 'Contratado', c: '#0E8080' },
+  { id: 'reprovado', name: 'Reprovado', short: 'Reprovado', c: '#D8493E' },
+  { id: 'desistiu', name: 'Desistiu', short: 'Desistiu', c: '#7B8794' }
+];
+const ST = Object.fromEntries(STAGES.map(s => [s.id, s]));
+const SIDE = ['reprovado', 'desistiu'];
+const CLOSED = ['reprovado', 'desistiu', 'contratado'];
+const NEXT = { novo: 'triagem', triagem: 'entrevista_rh', entrevista_rh: 'entrevista_cliente', entrevista_cliente: 'aprovado', aprovado: 'contratado' };
+const CAND_LABEL = { novo: 'Candidatura enviada', triagem: 'Em análise', entrevista_rh: 'Entrevista com RH', entrevista_cliente: 'Entrevista com a empresa', aprovado: 'Aprovado(a)', contratado: 'Contratado(a)', reprovado: 'Processo encerrado', desistiu: 'Processo encerrado' };
+const CAND_HINT = {
+  novo: 'Recebemos sua candidatura. Em breve nossa equipe fará a primeira análise.',
+  triagem: 'Nosso time está analisando seu perfil em relação à vaga.',
+  entrevista_rh: 'Você foi selecionado(a) para conversar com o RH. Fique atento(a) ao horário combinado.',
+  entrevista_cliente: 'Seu perfil foi encaminhado à empresa, que vai conversar com você.',
+  aprovado: 'Você foi aprovado(a)! Nossa equipe entrará em contato com os próximos passos.',
+  contratado: 'Parabéns pela contratação! Seu perfil segue no banco de talentos se você autorizar contatos futuros.',
+  reprovado: 'Neste momento seguiremos com outros perfis. Seu cadastro continua no banco de talentos para novas oportunidades.',
+  desistiu: 'Registramos sua desistência neste processo. Seu cadastro continua ativo no banco de talentos.'
+};
+const CAND_MSG = {
+  novo: 'Recebemos sua candidatura para {job}.', triagem: 'Você avançou para a Triagem na vaga {job}.',
+  entrevista_rh: 'Você avançou para a Entrevista com o RH ({job}).', entrevista_cliente: 'Você avançou para a entrevista com a empresa ({job}).',
+  aprovado: 'Boas notícias! Você foi aprovado(a) em {job}.', contratado: 'Parabéns! Você foi contratado(a) para {job}.',
+  reprovado: 'Seu processo seletivo para {job} foi encerrado.', desistiu: 'Registramos sua desistência em {job}.'
+};
+const UF = ['AL', 'BA', 'CE', 'DF', 'MA', 'MG', 'PB', 'PE', 'PI', 'RJ', 'RN', 'SE', 'SP'];
+const MODES = ['Presencial', 'Híbrido', 'Remoto'];
+const CONTRACTS = ['CLT', 'PJ', 'Estágio', 'Temporário', 'Freelancer'];
+const AVAIL = ['Imediata', '15 dias', '30 dias', '60 dias'];
+const EDU = ['Ensino médio', 'Técnico', 'Graduação', 'Pós-graduação', 'Mestrado/Doutorado'];
+const LVL = ['Básico', 'Intermediário', 'Avançado', 'Fluente', 'Nativo'];
+const LANGS = ['Inglês', 'Espanhol', 'Francês', 'Alemão', 'Italiano', 'Libras', 'Português'];
+const TAGS = ['Boa comunicação', 'Perfil comercial', 'Liderança', 'Disponibilidade imediata', 'Experiência em indústria', 'Perfil analítico', 'Proativo', 'Potencial de crescimento'];
+const AREAS = {
+  'Recursos Humanos': { titles: ['Analista de RH', 'Assistente de RH', 'Analista de Recrutamento e Seleção', 'Business Partner de RH'], skills: ['Recrutamento e seleção', 'Legislação trabalhista', 'Folha de pagamento', 'Treinamento e desenvolvimento', 'Excel', 'Departamento pessoal', 'Entrevista por competências'], base: 2600, courses: ['Psicologia', 'Administração', 'Gestão de Recursos Humanos'], certs: ['Certificação eSocial', 'Pós em Gestão de Pessoas'], desc: ['Condução de processos seletivos completos, da abertura da vaga ao onboarding.', 'Apoio às rotinas de departamento pessoal e acompanhamento de indicadores de RH.', 'Aplicação de entrevistas por competências e testes comportamentais.'] },
+  'Comercial': { titles: ['Executivo Comercial', 'Vendedor Interno', 'Gerente Comercial', 'Analista Comercial', 'Coordenador Comercial'], skills: ['Vendas B2B', 'CRM', 'Negociação', 'Prospecção', 'Excel', 'Gestão de carteira', 'Gestão de equipe'], base: 2800, courses: ['Administração', 'Marketing', 'Gestão Comercial'], certs: ['Negociação Estratégica', 'SPIN Selling'], desc: ['Prospecção ativa e gestão de carteira de clientes corporativos.', 'Condução de negociações e fechamento de contratos recorrentes.', 'Acompanhamento de metas e pipeline de vendas no CRM.'] },
+  'Administrativo': { titles: ['Assistente Administrativo', 'Analista Administrativo', 'Auxiliar Administrativo'], skills: ['Excel', 'Rotinas administrativas', 'Atendimento', 'Organização', 'Contas a pagar', 'Pacote Office'], base: 1900, courses: ['Administração', 'Gestão Financeira', 'Secretariado'], certs: ['Excel Avançado'], desc: ['Controle de documentos, contratos e agenda da diretoria.', 'Apoio às rotinas financeiras e emissão de relatórios.', 'Atendimento a fornecedores e organização de arquivos.'] },
+  'Tecnologia': { titles: ['Desenvolvedor Full Stack', 'Analista de Suporte', 'Analista de Dados', 'Analista de QA'], skills: ['JavaScript', 'React', 'SQL', 'Node.js', 'Python', 'Git', 'APIs REST'], base: 3800, courses: ['Ciência da Computação', 'Sistemas de Informação', 'Análise e Desenvolvimento de Sistemas'], certs: ['AWS Cloud Practitioner', 'Scrum Foundation'], desc: ['Desenvolvimento de funcionalidades web e integrações via API.', 'Manutenção de banco de dados e melhoria de desempenho.', 'Participação em cerimônias ágeis e revisão de código.'] },
+  'Financeiro': { titles: ['Analista Financeiro', 'Assistente Financeiro', 'Analista Contábil'], skills: ['Excel', 'Fluxo de caixa', 'Conciliação bancária', 'ERP', 'Contas a receber', 'Contabilidade'], base: 2900, courses: ['Ciências Contábeis', 'Administração', 'Economia'], certs: ['CPC-20', 'Excel para finanças'], desc: ['Fechamento mensal, conciliações e projeção de fluxo de caixa.', 'Controle de contas a pagar e a receber no ERP.', 'Elaboração de relatórios gerenciais para a diretoria.'] },
+  'Logística': { titles: ['Analista de Logística', 'Supervisor de Operações', 'Assistente de Logística'], skills: ['WMS', 'Gestão de estoque', 'Indicadores', 'Excel', 'Transporte', 'Lean'], base: 2700, courses: ['Logística', 'Engenharia de Produção', 'Administração'], certs: ['Lean Six Sigma Yellow Belt'], desc: ['Gestão de estoque, inventários cíclicos e acuracidade.', 'Roteirização e acompanhamento de indicadores de entrega.', 'Coordenação de equipe de expedição e recebimento.'] },
+  'Marketing': { titles: ['Analista de Marketing', 'Social Media', 'Designer Gráfico'], skills: ['Google Analytics', 'SEO', 'Redes sociais', 'Copywriting', 'Canva', 'Photoshop'], base: 2500, courses: ['Publicidade e Propaganda', 'Marketing', 'Design'], certs: ['Google Analytics 4', 'Meta Blueprint'], desc: ['Planejamento de conteúdo e gestão de redes sociais.', 'Análise de métricas de campanhas e relatórios de resultado.', 'Produção de peças gráficas e apoio a eventos.'] },
+  'Atendimento': { titles: ['Atendente', 'Recepcionista', 'Analista de Atendimento', 'Operador de SAC'], skills: ['Atendimento', 'Organização', 'CRM', 'Comunicação', 'Excel', 'Resolução de conflitos'], base: 1700, courses: ['Administração', 'Gestão Comercial'], certs: ['Atendimento ao cliente'], desc: ['Recepção e triagem de clientes presencialmente e por telefone.', 'Registro de chamados e acompanhamento de pendências.'] }
+};
+const AREA_LIST = Object.keys(AREAS);
+const ALL_SKILLS = uniq(Object.values(AREAS).flatMap(a => a.skills)).sort();
+const STAFF_ROLES = ['admin', 'recruiter'];
+const ROLE_NAME = { admin: 'Administrador', recruiter: 'Recrutador', client: 'Empresa cliente', candidate: 'Candidato' };
+
+/* ---------- 3. Persistência (trocar por API/banco real) ---------- */
+let db = null;
+const Persist = {
+  key: 'vinculo_mvp_v1', mem: null,
+  load() { try { const r = localStorage.getItem(this.key); if (r) return JSON.parse(r); } catch (e) { } return this.mem; },
+  save(d) { this.mem = d; try { localStorage.setItem(this.key, JSON.stringify(d)); } catch (e) { } },
+  clear() { this.mem = null; try { localStorage.removeItem(this.key); localStorage.removeItem('vinculo_sess'); } catch (e) { } }
+};
+const save = () => Persist.save(db);
+const by = (t, id) => db[t].find(x => x.id === id);
+
+/* ---------- 4. Serviços (mocks substituíveis) ---------- */
+const Sess = { mem: null, get() { try { return localStorage.getItem('vinculo_sess') || this.mem; } catch (e) { return this.mem; } }, set(v) { this.mem = v; try { v ? localStorage.setItem('vinculo_sess', v) : localStorage.removeItem('vinculo_sess'); } catch (e) { } } };
+// Auth: MOCK. Produção -> provedor real (Supabase Auth/Auth0), senha com hash, sessões e 2FA.
+const Auth = {
+  login(email, pass) { const u = db.users.find(x => x.email.toLowerCase() === String(email).trim().toLowerCase() && x.pass === pass && x.active !== false); if (u) Sess.set(u.id); return u; },
+  logout() { Sess.set(null); },
+  user() { const id = Sess.get(); return id && db ? by('users', id) || null : null; }
+};
+// Mailer/WhatsApp: MOCK. Produção -> SendGrid/Resend e API oficial do WhatsApp Business.
+const Mailer = { send(to, subject, body) { db.outbox.unshift({ id: uid('m'), channel: 'email', to, subject, body, date: nowISO() }); db.outbox.length = Math.min(db.outbox.length, 200); } };
+const WhatsApp = { send(to, body) { db.outbox.unshift({ id: uid('m'), channel: 'whatsapp', to, subject: 'Mensagem de WhatsApp', body, date: nowISO() }); } };
+// Calendar: MOCK. Produção -> Google Calendar / Microsoft Graph (gerar evento + link de reunião).
+const Calendar = { schedule(app, when, type) { return { id: uid('ev'), date: when, type, link: type === 'Online' ? 'https://meet.exemplo.demo/' + uid('') : '' }; } };
+// FileStore: MOCK (guarda só metadados). Produção -> S3/Supabase Storage com URL assinada.
+const FileStore = { put(file) { return file ? { name: file.name, size: file.size || 0, date: nowISO() } : null; } };
+// Billing: MOCK. Produção -> Stripe/Asaas para cobrança das empresas clientes.
+const Billing = { plan: 'Piloto gratuito', invoices: [] };
+
+const hasSkill = (c, sk) => {
+  const k = strip(sk);
+  return c.skills.some(s => strip(s) === k) || strip((c.title || '') + ' ' + c.exps.map(e => e.role + ' ' + e.desc).join(' ')).includes(k);
+};
+const ymNum = s => { const [y, m] = s.split('-').map(Number); return y * 12 + (m - 1); };
+function candYears(c) {
+  const n = new Date(), cur = n.getFullYear() * 12 + n.getMonth(); let m = 0;
+  (c.exps || []).forEach(e => { if (!e.from) return; const f = ymNum(e.from), t = e.to ? ymNum(e.to) : cur; m += Math.max(0, t - f); });
+  return Math.round(m / 12 * 10) / 10;
+}
+const yTxt = y => y < 1 ? `${Math.round(y * 12)} meses` : `${Math.floor(y)} ${Math.floor(y) === 1 ? 'ano' : 'anos'}`;
+const eduRank = c => Math.max(-1, ...(c.education || []).map(e => EDU.indexOf(e.level)));
+const langLvl = (c, l) => { const x = (c.languages || []).find(y => y.lang === l); return x ? LVL.indexOf(x.level) : -1; };
+const koFails = (a, job) => (job.screening || []).filter(q => q.ko && q.type === 'yn' && a.answers && a.answers[q.id] !== q.expected);
+
+// IA: MOCK determinístico. Produção -> trocar `provider` por chamada à API do Claude/OpenAI no backend.
+const AI = {
+  provider: 'mock',
+  parseResume(fileName) {
+    const h = [...fileName].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const area = AREA_LIST[h % AREA_LIST.length], A = AREAS[area], years = 2 + h % 7;
+    const n = new Date(), ym = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const e1 = new Date(n); e1.setMonth(e1.getMonth() - Math.round(years * 6)); const e2 = new Date(e1); e2.setMonth(e2.getMonth() - Math.round(years * 6));
+    const level = EDU[2 + h % 2];
+    const eng = LVL[h % 3];
+    return {
+      area, title: A.titles[h % A.titles.length], years,
+      skills: A.skills.slice(0, 4 + h % 2),
+      languages: [{ lang: 'Português', level: 'Nativo' }, { lang: 'Inglês', level: eng }],
+      education: [{ level, course: A.courses[h % A.courses.length], inst: ['UFPE', 'UNICAP', 'UPE', 'Estácio'][h % 4], year: String(n.getFullYear() - years - 2) }],
+      exps: [
+        { role: A.titles[h % A.titles.length], company: 'Empresa atual (extraída)', from: ym(e1), to: '', desc: A.desc[0] },
+        { role: A.titles[(h + 1) % A.titles.length], company: 'Empresa anterior (extraída)', from: ym(e2), to: ym(e1), desc: A.desc[1 % A.desc.length] }
+      ],
+      certs: A.certs.slice(0, 1)
+    };
+  },
+  compare(c, j) {
+    let s = 0; const met = [], check = [];
+    const yrs = candYears(c);
+    if (!j.minExp || yrs >= j.minExp) { s += 30; met.push(`${yTxt(yrs)} de experiência (mínimo: ${j.minExp || 0})`); }
+    else { s += Math.round(30 * yrs / j.minExp); check.push(`Experiência de ${yTxt(yrs)}, abaixo do mínimo de ${j.minExp} anos`); }
+    const have = (j.skills || []).filter(k => hasSkill(c, k)), miss = (j.skills || []).filter(k => !have.includes(k));
+    s += (j.skills || []).length ? Math.round(30 * have.length / j.skills.length) : 30;
+    have.forEach(k => met.push(k)); if (miss.length) check.push('Sem menção a: ' + miss.join(', '));
+    if (j.degree) { if (eduRank(c) >= 2) { s += 10; met.push('Ensino superior'); } else check.push('Ensino superior não identificado'); } else s += 10;
+    if (j.lang && j.lang.name) {
+      const need = LVL.indexOf(j.lang.level), got = langLvl(c, j.lang.name);
+      if (got >= need && got >= 0) { s += 10; met.push(`${j.lang.name} ${LVL[got].toLowerCase()}`); }
+      else if (got >= 0) check.push(`${j.lang.name} em nível ${LVL[got].toLowerCase()} (desejado: ${j.lang.level.toLowerCase()})`);
+      else check.push(`${j.lang.name} não informado`);
+    } else s += 10;
+    if (!c.salary) { s += 5; check.push('Pretensão salarial não informada'); }
+    else if (!j.salMax || c.salary <= j.salMax) { s += 10; met.push('Pretensão dentro da faixa'); }
+    else check.push(`Pretensão salarial acima da faixa (${brl(c.salary)} × teto ${brl(j.salMax)})`);
+    if (j.mode === 'Remoto') { s += 10; met.push('Vaga remota'); }
+    else if (c.city === j.city) { s += 10; met.push(`Reside em ${c.city}`); }
+    else check.push(`Reside em ${c.city}/${c.state}; vaga em ${j.city}/${j.state} (${j.mode.toLowerCase()})`);
+    return { score: Math.max(0, Math.min(100, s)), met, check };
+  }
+};
+
+/* ---------- 5. Seed de demonstração ---------- */
+function seedDB() {
+  const R = rng(11);
+  const pick = a => a[Math.floor(R() * a.length)], int = (a, b) => a + Math.floor(R() * (b - a + 1)), chance = p => R() < p;
+  const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const d = { users: [], companies: [], jobs: [], cands: [], apps: [], evals: [], notifs: [], outbox: [], invites: [], requests: [], delReqs: [], audit: [], ver: 1 };
+  const ym = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+  const slug = s => strip(s).replace(/[^a-z0-9]+/g, '');
+
+  d.companies = [
+    { id: 'co1', name: 'Grupo Maré Alimentos', sector: 'Indústria de alimentos', city: 'Jaboatão dos Guararapes', state: 'PE', contact: 'Sônia Maré', email: 'empresa@grupomare.demo' },
+    { id: 'co2', name: 'Atlântico Distribuidora', sector: 'Distribuição e logística', city: 'Recife', state: 'PE', contact: 'Paulo Atlântico', email: 'rh@atlantico.demo' },
+    { id: 'co3', name: 'NordesteTech Soluções', sector: 'Tecnologia', city: 'Recife', state: 'PE', contact: 'Ana Beltrão', email: 'talentos@nordestetech.demo' },
+    { id: 'co4', name: 'Casa Vértice Engenharia', sector: 'Construção civil', city: 'Salvador', state: 'BA', contact: 'Marcos Vértice', email: 'rh@casavertice.demo' },
+    { id: 'co5', name: 'Clínica Bem Viver', sector: 'Saúde', city: 'Fortaleza', state: 'CE', contact: 'Lívia Torres', email: 'gestao@bemviver.demo' }
+  ];
+  d.users.push(
+    { id: 'u_admin', role: 'admin', name: 'Helena Prado', email: 'admin@vinculo.demo', pass: 'demo123', active: true },
+    { id: 'u_rec1', role: 'recruiter', name: 'Camila Duarte', email: 'recrutador@vinculo.demo', pass: 'demo123', active: true },
+    { id: 'u_rec2', role: 'recruiter', name: 'Rafael Lima', email: 'rafael@vinculo.demo', pass: 'demo123', active: true }
+  );
+  d.companies.forEach(c => d.users.push({ id: 'u_' + c.id, role: 'client', name: c.contact, email: c.email, pass: 'demo123', companyId: c.id, active: true }));
+
+  // Vagas
+  const benPool = ['Vale-refeição', 'Plano de saúde', 'Vale-transporte', 'Plano odontológico', 'Bônus por metas', 'Home office parcial', 'Gympass', 'Seguro de vida'];
+  const SQ = (q, type, expected, ko) => ({ id: uid('q'), q, type, expected: expected || '', ko: !!ko });
+  const mkJob = (id, co, title, area, city, state, mode, salMin, salMax, contract, minExp, degree, skills, lang, rec, status, pub, deadline, screening, qty) => {
+    const A = AREAS[area], comp = d.companies.find(x => x.id === co);
+    return {
+      id, companyId: co, title, area, city, state, mode, salMin, salMax, contract, minExp, degree, skills, lang, recruiterId: rec, status, qty: qty || 1,
+      pubDate: pub == null ? null : dAgo(pub), deadline: deadline == null ? '' : dAhead(deadline).slice(0, 10),
+      desc: `${comp.name} busca ${title} para fortalecer o time de ${area.toLowerCase()} em ${city}. Você atuará em contato direto com a liderança, com autonomia para propor melhorias e acompanhar resultados.`,
+      resp: A.desc.concat(['Registrar informações e indicadores no sistema da empresa.']),
+      reqMand: [`Experiência mínima de ${minExp} ${minExp === 1 ? 'ano' : 'anos'} na área`, ...(degree ? ['Ensino superior completo ou em andamento'] : ['Ensino médio completo']), ...skills.slice(0, 3)],
+      reqDesir: A.certs.concat(lang ? [`${lang.name} ${lang.level.toLowerCase()}`] : ['Boa comunicação escrita']),
+      benefits: shuffle(benPool).slice(0, 4), screening: screening || []
+    };
+  };
+  const genQ = (minExp, local, rem) => [SQ(`Você possui experiência mínima de ${minExp} anos na área?`, 'yn', 'Sim', true), SQ('Você já utilizou as ferramentas citadas nos requisitos?', 'yn', 'Sim', false), ...(rem ? [] : [SQ(`Você tem disponibilidade para trabalhar presencialmente em ${local}?`, 'yn', 'Sim', true)]), SQ('Qual sua pretensão salarial?', 'number')];
+  d.jobs = [
+    mkJob('j1', 'co1', 'Analista de RH', 'Recursos Humanos', 'Recife', 'PE', 'Híbrido', 4500, 6000, 'CLT', 2, true, ['Recrutamento e seleção', 'Legislação trabalhista', 'Excel'], { name: 'Inglês', level: 'Intermediário' }, 'u_rec1', 'open', 14, 20, [SQ('Você possui experiência mínima de 2 anos em recrutamento e seleção?', 'yn', 'Sim', true), SQ('Você possui conhecimento em legislação trabalhista (CLT)?', 'yn', 'Sim', false), SQ('Você possui disponibilidade para trabalhar presencialmente em Recife?', 'yn', 'Sim', true), SQ('Qual sua pretensão salarial?', 'number')]),
+    mkJob('j2', 'co2', 'Executivo Comercial', 'Comercial', 'Recife', 'PE', 'Presencial', 3500, 5500, 'CLT', 2, false, ['Vendas B2B', 'CRM', 'Negociação'], null, 'u_rec1', 'open', 9, 25, [SQ('Você possui experiência mínima de 2 anos com vendas B2B?', 'yn', 'Sim', true), SQ('Você possui conhecimento em CRM?', 'yn', 'Sim', false), SQ('Você possui CNH B?', 'yn', 'Sim', true), SQ('Qual sua pretensão salarial?', 'number')], 2),
+    mkJob('j3', 'co2', 'Gerente Comercial', 'Comercial', 'Recife', 'PE', 'Presencial', 9000, 13000, 'CLT', 5, true, ['Vendas B2B', 'Gestão de carteira', 'Gestão de equipe', 'CRM'], { name: 'Inglês', level: 'Intermediário' }, 'u_rec1', 'open', 21, 15, [SQ('Você possui 5 anos ou mais de experiência comercial?', 'yn', 'Sim', true), SQ('Já liderou equipes de vendas com 5 ou mais pessoas?', 'yn', 'Sim', true), SQ('Tem disponibilidade para viagens?', 'yn', 'Sim', false), SQ('Qual sua pretensão salarial?', 'number')]),
+    mkJob('j4', 'co4', 'Assistente Administrativo', 'Administrativo', 'Salvador', 'BA', 'Presencial', 2200, 2800, 'CLT', 1, false, ['Excel', 'Rotinas administrativas', 'Atendimento'], null, 'u_rec2', 'open', 6, 12, genQ(1, 'Salvador')),
+    mkJob('j5', 'co3', 'Desenvolvedor Full Stack', 'Tecnologia', 'Recife', 'PE', 'Remoto', 8000, 12000, 'PJ', 3, false, ['JavaScript', 'React', 'SQL', 'Node.js'], { name: 'Inglês', level: 'Intermediário' }, 'u_rec2', 'open', 18, 30, genQ(3, 'Recife', true)),
+    mkJob('j6', 'co1', 'Analista Financeiro', 'Financeiro', 'Jaboatão dos Guararapes', 'PE', 'Híbrido', 5000, 6500, 'CLT', 3, true, ['Excel', 'Fluxo de caixa', 'Conciliação bancária', 'ERP'], null, 'u_rec1', 'open', 11, 18, genQ(3, 'Jaboatão dos Guararapes')),
+    mkJob('j7', 'co2', 'Analista de Logística', 'Logística', 'Recife', 'PE', 'Presencial', 3800, 5000, 'CLT', 2, false, ['WMS', 'Gestão de estoque', 'Indicadores', 'Excel'], null, 'u_rec2', 'open', 4, 22, genQ(2, 'Recife')),
+    mkJob('j8', 'co3', 'Analista de Marketing', 'Marketing', 'Recife', 'PE', 'Híbrido', 4000, 5500, 'CLT', 2, true, ['Google Analytics', 'SEO', 'Redes sociais'], null, 'u_rec2', 'open', 2, 28, genQ(2, 'Recife')),
+    mkJob('j9', 'co5', 'Recepcionista', 'Atendimento', 'Fortaleza', 'CE', 'Presencial', 1800, 2200, 'CLT', 1, false, ['Atendimento', 'Organização'], null, 'u_rec2', 'closed', 50, -10, genQ(1, 'Fortaleza')),
+    mkJob('j10', 'co5', 'Assistente Financeiro', 'Financeiro', 'Fortaleza', 'CE', 'Presencial', 2600, 3200, 'CLT', 1, false, ['Excel', 'Contas a receber'], null, 'u_rec2', 'paused', 30, 10, genQ(1, 'Fortaleza'))
+  ];
+
+  // Candidatos
+  const FIRST = ['Lucas', 'Beatriz', 'Rafael', 'Juliana', 'Thiago', 'Camila', 'Gabriel', 'Larissa', 'Mateus', 'Amanda', 'Felipe', 'Renata', 'Bruno', 'Patrícia', 'Diego', 'Fernanda', 'Eduardo', 'Carolina', 'André', 'Natália', 'Rodrigo', 'Bianca', 'Leonardo', 'Vanessa', 'Gustavo', 'Aline', 'Pedro', 'Tatiane', 'Henrique', 'Isabela', 'Caio', 'Priscila', 'Vinícius', 'Débora', 'Ricardo', 'Mariana', 'João', 'Letícia', 'Samuel'];
+  const LAST = ['Souza', 'Lima', 'Oliveira', 'Santos', 'Pereira', 'Albuquerque', 'Carvalho', 'Ferreira', 'Barbosa', 'Cavalcanti', 'Machado', 'Ribeiro', 'Moura', 'Nascimento', 'Freitas', 'Araújo', 'Campos', 'Teixeira', 'Monteiro', 'Vasconcelos', 'Rocha', 'Mendes', 'Barros', 'Gomes', 'Correia'];
+  const CITIES = [['Recife', 'PE'], ['Recife', 'PE'], ['Recife', 'PE'], ['Recife', 'PE'], ['Olinda', 'PE'], ['Jaboatão dos Guararapes', 'PE'], ['Caruaru', 'PE'], ['Salvador', 'BA'], ['Fortaleza', 'CE'], ['São Paulo', 'SP'], ['Natal', 'RN'], ['João Pessoa', 'PB']];
+  const EMPR = ['Grupo Ibirapitanga', 'Distribuidora Capibaribe', 'Supermercados Boa Viagem', 'Indústria Rio Doce', 'Construtora Horizonte', 'Banco Litoral', 'Loja Mundo Novo', 'Hospital Santa Rita', 'Agência Pixel', 'Transportes Sertão'];
+  const INST = ['UFPE', 'UNICAP', 'UFRPE', 'UPE', 'Estácio', 'UNINASSAU', 'FBV', 'UFBA', 'UNIFOR'];
+  const areaPlan = [...Array(5).fill('Recursos Humanos'), ...Array(8).fill('Comercial'), ...Array(5).fill('Administrativo'), ...Array(5).fill('Tecnologia'), ...Array(5).fill('Financeiro'), ...Array(5).fill('Logística'), ...Array(4).fill('Marketing'), ...Array(2).fill('Atendimento')];
+  const mkExps = (A, title, years, employed) => {
+    const exps = []; let end = new Date(); if (!employed) end.setMonth(end.getMonth() - int(1, 4));
+    const n = years < 1.5 ? 1 : years < 4 ? 2 : 3; let rem = Math.max(6, Math.round(years * 12));
+    for (let k = 0; k < n; k++) {
+      const dur = k === n - 1 ? Math.max(rem, 6) : Math.max(6, Math.round(rem / (n - k) * (0.7 + R() * 0.6)));
+      const from = new Date(end); from.setMonth(from.getMonth() - dur);
+      exps.push({ role: k === 0 ? title : pick(A.titles), company: pick(EMPR), from: ym(from), to: k === 0 && employed ? '' : ym(end), desc: A.desc[k % A.desc.length] });
+      end = new Date(from); end.setMonth(end.getMonth() - 1); rem -= dur;
+    }
+    return exps;
+  };
+  const mkCand = (i, spec = {}) => {
+    const area = spec.area || areaPlan[i], A = AREAS[area], [city, state] = spec.city || pick(CITIES);
+    const fn = spec.first || FIRST[i % FIRST.length], ln = spec.last || (pick(LAST) + (chance(.4) ? ' ' + pick(LAST) : ''));
+    const name = `${fn} ${ln}`, years = spec.years ?? Math.round((chance(.15) ? R() * 1.4 : 1.5 + R() * 10) * 2) / 2;
+    const title = spec.title || pick(A.titles);
+    const lv = R(); const eduLevel = lv < .1 ? 0 : lv < .2 ? 1 : lv < .72 ? 2 : lv < .93 ? 3 : 4;
+    const yr = new Date().getFullYear() - Math.round(years) - int(1, 4);
+    const education = spec.education || [{ level: EDU[eduLevel], course: eduLevel === 0 ? 'Ensino médio regular' : pick(A.courses), inst: eduLevel === 0 ? 'Colégio estadual' : pick(INST), year: String(yr) }];
+    const eng = R(); const languages = spec.languages || [{ lang: 'Português', level: 'Nativo' }, ...(eng < .2 ? [] : [{ lang: 'Inglês', level: eng < .4 ? 'Básico' : eng < .7 ? 'Intermediário' : eng < .9 ? 'Avançado' : 'Fluente' }]), ...(chance(.15) ? [{ lang: 'Espanhol', level: 'Básico' }] : [])];
+    const skills = spec.skills || shuffle(A.skills).slice(0, int(4, 5));
+    const salary = spec.salary || Math.round((A.base + years * 480 + R() * 700) / 100) * 100;
+    const modes = spec.modes || shuffle(MODES).slice(0, int(1, 3));
+    const email = strip(fn) + '.' + strip(ln.split(' ')[0]) + '@email.demo';
+    return {
+      id: 'ca' + (spec.id || i), name, email: spec.email || email, phone: `(${state === 'PE' ? 81 : 71}) 9${int(8000, 9999)}-${int(1000, 9999)}`,
+      city, state, birth: `${int(1980, 2003)}-${String(int(1, 12)).padStart(2, '0')}-${String(int(1, 28)).padStart(2, '0')}`,
+      linkedin: chance(.7) ? 'https://linkedin.com/in/' + slug(name) : '', portfolio: area === 'Tecnologia' || area === 'Marketing' ? 'https://' + slug(fn) + '.dev' : '',
+      title, area, salary, avail: spec.avail || pick(['Imediata', 'Imediata', '15 dias', '30 dias', '30 dias', '60 dias']), modes,
+      travel: pick(['Sim', 'Não', 'Sim']), education, courses: chance(.6) ? A.certs.slice(0, 1) : [], languages, skills,
+      exps: spec.exps || mkExps(A, title, years, chance(.8)),
+      summary: spec.summary || `${title} com cerca de ${Math.round(years)} anos de experiência em ${area.toLowerCase()}. Perfil com foco em ${skills.slice(0, 2).join(' e ').toLowerCase()}, comprometido com resultados e trabalho em equipe.`,
+      resume: chance(.9) ? { name: `curriculo_${slug(fn)}_${slug(ln.split(' ')[0])}.pdf`, size: int(90, 420) * 1024, date: dAgo(int(5, 200)) } : null,
+      tags: spec.tags || (chance(.4) ? shuffle(TAGS).slice(0, int(1, 2)) : []), notes: '', pastHistory: spec.pastHistory || [],
+      consent: { terms: true, storage: true, marketing: chance(.7), date: dAgo(int(10, 220)), version: '1.0' },
+      createdAt: dAgo(int(2, 150)), deleted: false
+    };
+  };
+  const marina = mkCand(0, {
+    id: 'marina', first: 'Marina', last: 'Souza', email: 'marina.souza@email.demo', area: 'Recursos Humanos', title: 'Analista de RH Jr.', city: ['Recife', 'PE'], years: 3.2, salary: 4800, avail: 'Imediata', modes: ['Híbrido', 'Remoto'],
+    skills: ['Recrutamento e seleção', 'Legislação trabalhista', 'Excel', 'Entrevista por competências', 'Departamento pessoal'],
+    education: [{ level: 'Graduação', course: 'Psicologia', inst: 'UNICAP', year: '2022' }],
+    languages: [{ lang: 'Português', level: 'Nativo' }, { lang: 'Inglês', level: 'Intermediário' }],
+    summary: 'Analista de RH com mais de 3 anos de experiência em recrutamento e seleção para operações comerciais e industriais. Gosto de estruturar processos claros e de oferecer uma boa experiência ao candidato.',
+    tags: ['Boa comunicação']
+  });
+  marina.phone = '(81) 98877-1234'; marina.linkedin = 'https://linkedin.com/in/marina-souza-rh'; marina.courses = ['Certificação eSocial'];
+  marina.exps = [{ role: 'Analista de RH Jr.', company: 'Supermercados Boa Viagem', from: ym(new Date(Date.now() - 20 * 30 * 864e5)), to: '', desc: 'Condução de processos seletivos para lojas e centro de distribuição; apoio ao departamento pessoal.' }, { role: 'Assistente de RH', company: 'Agência Pixel', from: ym(new Date(Date.now() - 44 * 30 * 864e5)), to: ym(new Date(Date.now() - 21 * 30 * 864e5)), desc: 'Triagem de currículos, agendamento de entrevistas e onboarding.' }];
+  const cands = [marina];
+  for (let i = 1; i < 40; i++) cands.push(mkCand(i, { area: areaPlan[i - 1] }));
+  // histórico anterior de exemplo (Banco de Talentos reutilizável)
+  const bruno = cands.find(c => c.area === 'Comercial');
+  bruno.name = 'Bruno Carvalho'; bruno.email = 'bruno.carvalho@email.demo'; bruno.city = 'Recife'; bruno.state = 'PE'; bruno.tags = ['Perfil comercial', 'Liderança'];
+  bruno.pastHistory = [
+    { job: 'Analista Comercial', company: 'Atlântico Distribuidora', date: '2026-08-15T12:00:00.000Z', result: 'Não avançou após entrevista' },
+    { job: 'Coordenador Comercial', company: 'Grupo Maré Alimentos', date: '2026-05-04T12:00:00.000Z', result: 'Contratado' }
+  ];
+  d.cands = cands;
+  cands.forEach(c => d.users.push({ id: 'u_' + c.id, role: 'candidate', name: c.name, email: c.email, pass: 'demo123', candId: c.id, active: true }));
+
+  // Candidaturas
+  const answersFor = (job, c, ok) => { const a = {}; job.screening.forEach(q => { a[q.id] = q.type === 'yn' ? (ok || chance(.86) ? q.expected : (q.expected === 'Sim' ? 'Não' : 'Sim')) : q.type === 'number' ? String(c.salary) : 'Tenho interesse na oportunidade.'; }); return a; };
+  const PATH = ['novo', 'triagem', 'entrevista_rh', 'entrevista_cliente', 'aprovado', 'contratado'];
+  const mkApp = (job, c, stage, daysOld, ok) => {
+    const date = new Date(Date.now() - daysOld * 864e5);
+    let path; if (stage === 'reprovado' || stage === 'desistiu') { path = PATH.slice(0, int(1, 4)).concat(stage); } else path = PATH.slice(0, PATH.indexOf(stage) + 1);
+    const history = path.map((s, k) => ({ stage: s, date: new Date(Math.min(Date.now() - 3600e3, date.getTime() + k * int(1, 3) * 864e5)).toISOString(), by: k === 0 ? c.name : (job.recruiterId === 'u_rec2' ? 'Rafael Lima' : 'Camila Duarte') }));
+    const a = { id: uid('ap'), jobId: job.id, candId: c.id, date: date.toISOString(), stage, answers: answersFor(job, c, ok), salary: c.salary, avail: c.avail, note: '', history, forwarded: path.includes('entrevista_cliente'), clientDecision: null, clientFeedback: [], interview: null, hiredDate: null };
+    if (['aprovado', 'contratado'].includes(stage)) a.clientDecision = 'advance';
+    if (stage === 'contratado') a.hiredDate = history[history.length - 1].date;
+    if (stage === 'entrevista_rh') a.interview = { date: dAhead(int(1, 6), int(9, 16)), type: pick(['Online', 'Presencial']) };
+    if (stage === 'entrevista_cliente') a.interview = { date: dAhead(int(2, 8), int(9, 16)), type: pick(['Online', 'Presencial']) };
+    d.apps.push(a); return a;
+  };
+  const cyc = ['novo', 'novo', 'triagem', 'entrevista_rh', 'novo', 'entrevista_cliente', 'triagem', 'aprovado', 'reprovado', 'novo', 'contratado', 'desistiu', 'triagem', 'entrevista_rh'];
+  d.jobs.filter(j => j.status !== 'draft').forEach((job, ji) => {
+    const pool = shuffle(cands.filter(c => c.area === job.area && c.id !== 'camarina'));
+    const others = shuffle(cands.filter(c => c.area !== job.area)).slice(0, 3);
+    const cap = job.status === 'closed' ? 6 : 10;
+    pool.concat(others).filter(c => c.id !== marina.id).slice(0, cap).forEach((c, k) => {
+      const stage = job.status === 'closed' ? (k === 0 ? 'contratado' : pick(['reprovado', 'desistiu', 'reprovado'])) : cyc[(k + ji) % cyc.length];
+      mkApp(job, c, stage, int(1, 52));
+    });
+  });
+  // Marina: 3 candidaturas em estágios distintos
+  const a1 = mkApp(d.jobs[0], marina, 'entrevista_rh', 9, true); a1.interview = { date: dAhead(2, 14), type: 'Online' };
+  mkApp(d.jobs[3], marina, 'triagem', 4, true);
+  mkApp(d.jobs[8], marina, 'reprovado', 45, true);
+  const bapp = mkApp(d.jobs[1], bruno, 'triagem', 3, true);
+
+  // Avaliações internas de exemplo
+  d.apps.filter(a => ['entrevista_rh', 'entrevista_cliente', 'aprovado', 'contratado'].includes(a.stage)).forEach((a, k) => {
+    if (k % 2) return; const c = cands.find(x => x.id === a.candId), job = d.jobs.find(x => x.id === a.jobId);
+    d.evals.push({ id: uid('ev'), candId: c.id, appId: a.id, jobId: job.id, by: job.recruiterId === 'u_rec2' ? 'Rafael Lima' : 'Camila Duarte', date: dAgo(int(1, 20)), pos: 'Comunicação clara, boa aderência técnica e postura profissional.', attn: pick(['Pretensão no limite superior da faixa.', 'Pouca experiência com a ferramenta principal.', 'Disponibilidade sujeita a aviso prévio.']), salary: c.salary, avail: c.avail, notes: 'Entrevista conduzida por vídeo. Candidato(a) demonstrou interesse real pela vaga.', tech: int(3, 5), behav: int(3, 5), tags: c.tags.slice(0, 2) });
+  });
+
+  // Notificações
+  const N = (userId, text, link, days, read) => d.notifs.push({ id: uid('n'), userId, text, link, date: dAgo(days), read: !!read });
+  N('u_camarina', 'Recebemos sua candidatura para Analista de RH.', '/c/candidaturas', 9, true);
+  N('u_camarina', 'Você avançou para a Entrevista com o RH (Analista de RH).', '/c/candidaturas', 5);
+  N('u_camarina', 'Sua entrevista foi agendada para os próximos dias (Analista de RH).', '/c/candidaturas', 4);
+  N('u_camarina', 'Seu processo seletivo para Recepcionista foi encerrado.', '/c/candidaturas', 30, true);
+  N('u_rec1', 'Novo candidato para a vaga Analista de RH.', '/s/vaga/j1', 1);
+  N('u_rec1', 'Novo candidato para a vaga Executivo Comercial.', '/s/vaga/j2', 2);
+  N('u_rec1', 'Candidato respondeu à entrevista: confirmação recebida.', '/s/vaga/j1', 3, true);
+  N('u_co1', '3 novos candidatos foram encaminhados para sua vaga Analista de RH.', '/e/vaga/j1', 2);
+  N('u_co2', 'Um novo candidato foi encaminhado para a vaga Gerente Comercial.', '/e/vaga/j3', 3);
+  d.requests.push({ id: 'rq1', companyId: 'co3', title: 'Analista de Suporte N2', area: 'Tecnologia', qty: 2, city: 'Recife', mode: 'Híbrido', salary: '4500 a 6000', notes: 'Atendimento a clientes corporativos, escala 8h às 17h.', date: dAgo(2), status: 'nova' });
+  return d;
+}
+
+/* ---------- 6. Estado de UI e helpers de tela ---------- */
+const ui = { jobs: {}, tb: { limit: 18 }, tri: { stage: 'novo' }, boardq: '', cmp: {}, side: false };
+const curUser = () => Auth.user();
+const isStaff = u => !!u && STAFF_ROLES.includes(u.role);
+const homeOf = u => !u ? '/' : u.role === 'candidate' ? '/c/candidaturas' : u.role === 'client' ? '/e/painel' : '/s/dashboard';
+const candOf = u => u && u.candId ? by('cands', u.candId) : null;
+const compName = id => { const c = by('companies', id); return c ? c.name : '—'; };
+const stageBadge = id => `<span class="badge dot" style="--c:${ST[id].c}">${ST[id].short}</span>`;
+const salRange = j => (j.salMin || j.salMax) ? `${brl(j.salMin)} a ${brl(j.salMax)}` : 'A combinar';
+const jobApps = id => db.apps.filter(a => a.jobId === id);
+const candApps = id => db.apps.filter(a => a.candId === id);
+const candUser = c => db.users.find(u => u.candId === c.id);
+const pendingDel = id => db.delReqs.some(r => r.candId === id && r.status === 'pendente');
+const clientsOf = co => db.users.filter(u => u.role === 'client' && u.companyId === co);
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const ymTxt = s => { if (!s) return ''; const [y, m] = s.split('-'); return `${MONTHS[+m - 1]}/${y}`; };
+const ul = a => a && a.length ? `<ul>${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="mut">Não informado.</p>';
+const chipsView = a => a && a.length ? `<div class="flex wrap" style="gap:6px">${a.map(x => `<span class="chip plain">${esc(x)}</span>`).join('')}</div>` : '<span class="mut">—</span>';
+const opts = (arr, val, ph) => (ph != null ? `<option value="">${esc(ph)}</option>` : '') + arr.map(o => { const v = Array.isArray(o) ? o[0] : o, l = Array.isArray(o) ? o[1] : o; return `<option value="${esc(v)}"${String(v) === String(val ?? '') ? ' selected' : ''}>${esc(l)}</option>`; }).join('');
+const sel = (name, arr, val, ph, attrs = '') => `<select name="${name}" ${attrs}>${opts(arr, val, ph)}</select>`;
+const fld = (label, inner, hint) => `<label class="field"><span>${label}${hint ? ` <small>${hint}</small>` : ''}</span>${inner}</label>`;
+const inp = (name, val, o = {}) => `<input name="${name}" type="${o.type || 'text'}" value="${esc(val ?? '')}" ${o.req ? 'required' : ''} ${o.ph ? `placeholder="${esc(o.ph)}"` : ''} ${o.attrs || ''}>`;
+
+function audit(action, ref) {
+  const u = curUser(), who = u ? `${u.name} (${ROLE_NAME[u.role]})` : '—', l = db.audit[0];
+  if (l && l.user === who && l.action === action && l.ref === ref && Date.now() - new Date(l.date) < 60000) return;
+  db.audit.unshift({ id: uid('au'), user: who, action, ref, date: nowISO() }); db.audit.length = Math.min(db.audit.length, 150); save();
+}
+function notify(userId, text, link) {
+  if (!userId) return; db.notifs.unshift({ id: uid('n'), userId, text, link: link || '', date: nowISO(), read: false });
+  const u = by('users', userId); if (u) Mailer.send(u.email, text.length > 60 ? text.slice(0, 57) + '…' : text, text);
+}
+const unreadOf = u => u ? db.notifs.filter(n => n.userId === u.id && !n.read).length : 0;
+
+function completeness(c) {
+  const it = [['Telefone/WhatsApp', !!c.phone, 5], ['Cidade e estado', !!(c.city && c.state), 5], ['Data de nascimento', !!c.birth, 4], ['Cargo atual', !!c.title, 7], ['Área profissional', !!c.area, 6], ['Pretensão salarial', !!c.salary, 6], ['Disponibilidade para início', !!c.avail, 5], ['Modalidade desejada', (c.modes || []).length > 0, 5], ['Resumo profissional (mínimo 40 caracteres)', (c.summary || '').length >= 40, 10], ['Formação acadêmica', (c.education || []).length > 0, 10], ['Ao menos 3 competências', (c.skills || []).length >= 3, 10], ['Idiomas', (c.languages || []).length > 0, 5], ['Experiência profissional', (c.exps || []).length > 0, 10], ['Currículo em PDF', !!c.resume, 8], ['Link do LinkedIn', !!c.linkedin, 2], ['Cursos e certificações', (c.courses || []).length > 0, 2]];
+  return { pct: it.filter(x => x[1]).reduce((a, x) => a + x[2], 0), missing: it.filter(x => !x[1]).map(x => x[0]) };
+}
+function candStatus(c) {
+  const apps = candApps(c.id);
+  if (apps.some(a => !CLOSED.includes(a.stage))) return ['Em processo', 'var(--blue)'];
+  const h = apps.filter(a => a.stage === 'contratado').sort((a, b) => new Date(b.hiredDate) - new Date(a.hiredDate))[0];
+  if (h && Date.now() - new Date(h.hiredDate) < 90 * 864e5) return ['Contratado(a) recentemente', 'var(--pri)'];
+  return ['Disponível no banco', 'var(--green)'];
+}
+
+/* ---------- Shells ---------- */
+const themeBtn = () => { const d = Theme.eff() === 'dark', l = d ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'; return `<button type="button" class="iconbtn themebtn" data-act="themeToggle" aria-label="${l}" title="${l}">${ico(d ? 'sun' : 'moon', 18)}</button>`; };
+const themeSeg = () => { const t = Theme.get(); return `<div class="seg" role="group" aria-label="Aparência do site">${[['light', 'sun', 'Claro'], ['dark', 'moon', 'Escuro'], ['auto', 'monitor', 'Auto']].map(([v, i, l]) => `<button type="button" data-act="theme" data-v="${v}" aria-pressed="${t === v}">${ico(i, 14)}${l}</button>`).join('')}</div>`; };
+function pub(content) {
+  const u = curUser(), n = unreadOf(u), cand = u && u.role === 'candidate', h = location.hash;
+  let nav;
+  if (!u) nav = `<a href="#/vagas">Vagas</a><a href="#/para-empresas">Para empresas</a><a class="btn sm" href="#/entrar">Entrar</a><a class="btn pri sm" href="#/cadastro">Cadastrar currículo</a>`;
+  else if (cand) nav = `<a class="cand-only" href="#/vagas">Vagas</a><a class="cand-only" href="#/c/candidaturas">Minhas candidaturas</a><a class="cand-only" href="#/c/perfil">Meu perfil</a><a class="cand-only" href="#/c/notificacoes">Notificações${n ? ` <span class="cnt">${n}</span>` : ''}</a><button class="btn ghost sm" data-act="logout">Sair</button>`;
+  else nav = `<a href="#/vagas">Vagas</a><a class="btn pri sm" href="#${homeOf(u)}">Ir para meu painel</a><button class="btn ghost sm" data-act="logout">Sair</button>`;
+  const tab = (href, ic, label, badge) => `<a href="#${href}" class="${h.startsWith('#' + href) ? 'on' : ''}">${ico(ic, 22)}${label}${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
+  const bar = cand ? `<nav class="tabbar" aria-label="Menu do candidato">${tab('/vagas', 'search', 'Vagas')}${tab('/c/candidaturas', 'brief', 'Candidaturas')}${tab('/c/perfil', 'user', 'Perfil')}${tab('/c/notificacoes', 'bell', 'Avisos', n)}</nav>` : '';
+  document.body.classList.toggle('hasbar', !!cand);
+  return `<header class="top"><div class="top-in"><a class="logo" href="#/">${LOGO}vínculo</a><nav>${nav}${themeBtn()}</nav></div></header>${content}<footer class="foot2"><div class="foot2-in"><div><a class="logo" href="#/">${LOGO}vínculo</a><p class="mut sm mt-s" style="max-width:320px">Uma ponte entre pessoas e oportunidades. Conectamos talentos às vagas certas e empresas às pessoas que precisam.</p><div class="mt">${themeSeg()}</div></div>
+  <div><h4>Profissionais</h4><a href="#/vagas">Buscar vagas</a><a href="#/cadastro">Cadastrar currículo</a><a href="#/entrar">Área do candidato</a></div>
+  <div><h4>Empresas</h4><a href="#/para-empresas">Recrutamento e seleção</a><a href="#/para-empresas">Banco de talentos</a><a href="#/entrar">Área da empresa</a></div>
+  <div><h4>Vínculo</h4><a href="#/privacidade">Política de privacidade</a><a href="#/termos">Termos de uso</a><a href="#/entrar">Acesso de demonstração</a></div>
+  <div class="bot"><span>© ${new Date().getFullYear()} Vínculo. Seus dados tratados conforme a LGPD.</span><button class="btn ghost sm" data-act="reset">Restaurar dados de demonstração</button></div></div></footer>${bar}`;
+}
+function shell(content) {
+  const u = curUser(), n = unreadOf(u), h = location.hash.replace('#', ''); document.body.classList.remove('hasbar');
+  const nl = (href, ic, label, badge) => `<a class="nl ${h === href || (href.length > 4 && h.startsWith(href + '/')) ? 'on' : ''}" href="#${href}" data-act="closeSide">${ico(ic)}<span class="grow">${label}</span>${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
+  let links;
+  if (u.role === 'client') links = nl('/e/painel', 'home', 'Meu painel') + nl('/e/solicitar', 'plus', 'Solicitar vaga') + nl('/e/notificacoes', 'bell', 'Notificações', n);
+  else {
+    const reqs = db.requests.filter(r => r.status === 'nova').length;
+    links = nl('/s/dashboard', 'chart', 'Painel') + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs) + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
+    if (u.role === 'admin') links += `<div class="grp">Administração</div>` + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
+  }
+  const search = isStaff(u) ? `<form class="srch" data-form="gsearch" role="search">${ico('search', 18)}<input name="q" placeholder="Buscar talento por nome, cargo ou competência" aria-label="Buscar talento"></form>` : '<div class="grow"></div>';
+  return `<div class="app ${ui.side ? 'open' : ''}"><aside class="side" aria-label="Menu"><a class="logo" href="#${homeOf(u)}">${LOGO}vínculo</a>${links}<div class="themerow"><span class="xs mut b">Aparência</span>${themeSeg()}</div><div class="me">${avatar(u.name, 36)}<div class="grow"><div class="b sm">${esc(u.name)}</div><div class="xs mut">${ROLE_NAME[u.role]}${u.companyId ? ' — ' + esc(compName(u.companyId)) : ''}</div></div><button class="iconbtn" data-act="logout" aria-label="Sair">${ico('out')}</button></div></aside><div class="scrim" data-act="closeSide"></div>
+  <div class="mainc"><div class="bar"><button class="iconbtn menub" data-act="openSide" aria-label="Abrir menu">${ico('menu')}</button>${search}${themeBtn()}<a class="iconbtn" href="#/${u.role === 'client' ? 'e' : 's'}/notificacoes" aria-label="Notificações">${ico('bell')}${n ? `<span class="cnt">${n}</span>` : ''}</a></div><main class="page">${content}</main></div></div>`;
+}
+const pageHead = (title, sub, actions) => `<div class="ph"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div><div class="flex gap wrap">${actions || ''}</div></div>`;
+const notFound = () => pub(`<main class="wrapc narrow"><div class="empty">Página não encontrada. <a href="#/">Voltar ao início</a></div></main>`);
+const denied = () => { const u = curUser(); const c = `<div class="empty"><b>Acesso restrito.</b><p class="mt-s">Seu perfil (${u ? ROLE_NAME[u.role] : 'visitante'}) não tem permissão para ver esta página.</p><p class="mt-s"><a class="btn sm" href="#${u ? homeOf(u) : '/entrar'}">Voltar</a></p></div>`; return u && u.role !== 'candidate' ? shell(c) : pub(`<main class="wrapc narrow">${c}</main>`); };
+
+/* ---------- Vagas (públicas) ---------- */
+const SAL_OPTS = [['0-3000', 'Até R$ 3.000'], ['3000-5000', 'R$ 3.000 a R$ 5.000'], ['5000-8000', 'R$ 5.000 a R$ 8.000'], ['8000-99999', 'Acima de R$ 8.000']];
+function jobMatch(j, f) {
+  if (f.q && !strip([j.title, compName(j.companyId), j.area, j.city, j.desc, j.skills.join(' ')].join(' ')).includes(strip(f.q))) return false;
+  if (f.title && j.title !== f.title) return false; if (f.area && j.area !== f.area) return false;
+  if (f.city && j.city !== f.city) return false; if (f.state && j.state !== f.state) return false;
+  if (f.mode && j.mode !== f.mode) return false; if (f.contract && j.contract !== f.contract) return false;
+  if (f.sal) { const [lo, hi] = f.sal.split('-').map(Number); if (!(j.salMax >= lo && j.salMin <= hi)) return false; }
+  return true;
+}
+const jobCard = j => {
+  const u = curUser(), applied = u && u.candId && db.apps.some(a => a.jobId === j.id && a.candId === u.candId);
+  return `<article class="card jcard"><div><h3><a href="#/vaga/${j.id}" style="color:inherit">${esc(j.title)}</a></h3><div class="mut sm">${esc(compName(j.companyId))}</div></div>
+  <div class="meta"><span class="badge" style="--c:var(--pri)">${j.mode}</span><span class="badge">${j.contract}</span><span class="badge">${ico('pin', 12)} ${esc(j.city)}/${j.state}</span></div>
+  <div class="sal">${salRange(j)}</div><div class="sm mut">${esc(j.benefits.slice(0, 3).join(', '))}${j.benefits.length > 3 ? ' e mais' : ''}</div>
+  <div class="flex between gap wrap" style="margin-top:auto"><span class="xs mut">Publicada ${ago(j.pubDate)}${j.deadline ? ' — até ' + fdate(j.deadline) : ''}</span>${applied ? `<a class="btn sm" href="#/c/candidaturas">Já candidatado(a)</a>` : `<a class="btn pri sm" href="#/candidatar/${j.id}">Candidatar-se</a>`}</div></article>`;
+};
+const jobsResults = () => { const l = db.jobs.filter(j => j.status === 'open' && jobMatch(j, ui.jobs)); return `<p class="mut sm mb">${l.length} ${l.length === 1 ? 'vaga encontrada' : 'vagas encontradas'}</p>${l.length ? `<div class="jgrid">${l.map(jobCard).join('')}</div>` : '<div class="empty">Nenhuma vaga com esses filtros. Tente ampliar a busca ou <a href="#" data-act="clearJobs">limpar filtros</a>.</div>'}`; };
+function jobsPublic() {
+  const f = ui.jobs, open = db.jobs.filter(j => j.status === 'open');
+  const L = (n, ph, arr) => `<label class="field"><span>${ph}</span><select name="${n}" data-live="jobs">${opts(arr, f[n], 'Todos')}</select></label>`;
+  return pub(`<section class="pagehero"><div class="wrapc" style="padding-bottom:30px"><span class="eyebrow">Vagas</span><h2>Encontre sua próxima oportunidade</h2><p>Escolha uma vaga e candidate-se em poucos minutos. Seu perfil fica guardado para as próximas oportunidades.</p></div></section><main class="wrapc">
+  <div class="card tight mb"><label class="field"><span>Buscar por palavra-chave</span><input name="q" type="search" data-live="jobs" value="${esc(f.q || '')}" placeholder="Ex.: vendas, Excel, analista, Recife"></label></div>
+  <details class="fx mb" ${Object.keys(f).some(k => k !== 'q' && f[k]) ? 'open' : ''}><summary>Filtros</summary><div class="filters">${L('title', 'Cargo', uniq(open.map(j => j.title)).sort())}${L('area', 'Área', uniq(open.map(j => j.area)).sort())}${L('city', 'Cidade', uniq(open.map(j => j.city)).sort())}${L('state', 'Estado', uniq(open.map(j => j.state)).sort())}${L('mode', 'Modalidade', MODES)}${L('sal', 'Faixa salarial', SAL_OPTS)}${L('contract', 'Tipo de contratação', CONTRACTS)}</div></details>
+  <div id="jobs-res">${jobsResults()}</div></main>`);
+}
+function jobDetail(id) {
+  const j = by('jobs', id); if (!j) return notFound(); const u = curUser();
+  const applied = u && u.candId && db.apps.find(a => a.jobId === j.id && a.candId === u.candId);
+  const closed = j.status !== 'open';
+  const cta = applied ? `<a class="btn block" href="#/c/candidaturas">Você já se candidatou. Acompanhar</a>` : closed ? `<button class="btn block" disabled>Vaga ${j.status === 'paused' ? 'pausada' : 'encerrada'}</button>` : `<a class="btn pri block" href="#/candidatar/${j.id}">Candidatar-se</a>`;
+  return pub(`<main class="wrapc"><p class="sm mb"><a href="#/vagas">${'←'} Todas as vagas</a></p><div class="cols two"><div class="stack">
+  <div class="card"><h1 style="font-size:clamp(26px,4vw,36px)">${esc(j.title)}</h1><p class="mut mt-s">${esc(compName(j.companyId))}</p><div class="flex wrap gap mt"><span class="badge" style="--c:var(--pri)">${j.mode}</span><span class="badge">${j.contract}</span><span class="badge">${ico('pin', 12)} ${esc(j.city)}/${j.state}</span><span class="badge">${esc(j.area)}</span></div></div>
+  <div class="card"><h3>Sobre a vaga</h3><p>${esc(j.desc)}</p></div>
+  <div class="card"><h3>Responsabilidades</h3>${ul(j.resp)}</div>
+  <div class="g2"><div class="card"><h3>Requisitos obrigatórios</h3>${ul(j.reqMand)}</div><div class="card"><h3>Requisitos desejáveis</h3>${ul(j.reqDesir)}</div></div>
+  <div class="card"><h3>Benefícios</h3>${chipsView(j.benefits)}</div></div>
+  <aside class="stack"><div class="card"><div class="sal" style="font-size:22px">${salRange(j)}</div><p class="mut sm">${j.contract}${j.qty > 1 ? ` — ${j.qty} posições` : ''}</p><div class="mt">${cta}</div><hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><p class="sm"><b>Publicada em</b> ${fdate(j.pubDate)}</p><p class="sm mt-s"><b>Candidaturas até</b> ${j.deadline ? fdate(j.deadline) : 'sem prazo definido'}</p></div>
+  <div class="note">${ico('shield', 14)} Seus dados são usados apenas para processos seletivos. <a href="#/privacidade">Saiba mais</a></div></aside></div></main>`);
+}
+
+/* ---------- Landing, login, cadastro, textos legais ---------- */
+const TESTIMONIALS = [
+  ['Candidata', 0, 'Pela primeira vez eu soube em que etapa estava. Mesmo antes da resposta final, me senti respeitada.', 'Juliana C.', 'Analista de Marketing', ''],
+  ['Empresa', 1, 'Recebemos poucos candidatos, mas todos certos para a vaga. Fechamos em menos de três semanas.', 'Grupo Maré Alimentos', 'Gerência de RH', 'c2'],
+  ['Candidato', 0, 'Meu perfil ficou no banco e me chamaram meses depois para uma vaga ainda melhor.', 'Rafael A.', 'Coordenador de Logística', 'c3'],
+  ['Candidata', 0, 'Me candidatei em poucos minutos e recebi aviso a cada etapa. Foi a primeira vez que não fiquei no escuro.', 'Camila R.', 'Assistente Administrativa', ''],
+  ['Empresa', 1, 'O banco de talentos nos poupou semanas: já havia gente qualificada pronta para a vaga de desenvolvedor.', 'NordesteTech Soluções', 'Gerência de Pessoas', 'c2'],
+  ['Candidato', 0, 'Não passei na primeira vaga, mas fui chamado para outra. Meu perfil ficou guardado e ninguém me esqueceu.', 'Thiago B.', 'Analista Comercial', 'c3'],
+  ['Empresa', 1, 'Acompanhar os candidatos em um quadro, em tempo real, deu muita tranquilidade para o nosso time.', 'Casa Vértice Engenharia', 'Departamento de RH', ''],
+  ['Candidata', 0, 'Gostei de ver meus dados protegidos e de poder pedir a exclusão quando quisesse. Passa confiança.', 'Beatriz M.', 'Analista Financeira', 'c2']
+];
+const testimonials = dup => TESTIMONIALS.map(([tag, co, txt, name, role, cls]) => `<div class="quote ${cls}"${dup ? ' aria-hidden="true"' : ''}><span class="tagc ${co ? 'co' : ''}">${tag}</span><p>“${txt}”</p><div class="flex gap">${avatar(name, 36)}<div><b class="sm">${name}</b><div class="xs mut">${role}</div></div></div></div>`).join('');
+function landing() {
+  const open = db.jobs.filter(j => j.status === 'open'), talents = db.cands.filter(c => !c.deleted).length, cos = db.companies ? db.companies.length : 0, hired = db.apps.filter(a => a.stage === 'contratado').length;
+  return pub(`<section class="h-hero"><div class="h-in"><div class="reveal"><span class="eyebrow">Recrutamento, seleção e banco de talentos</span>
+  <h1>Talentos encontram oportunidades. Empresas encontram <span class="hl">pessoas</span>.</h1>
+  <p class="h-lead">Seu próximo passo profissional começa com uma boa conexão. Cuidamos de cada candidatura com atenção humana — e de cada vaga como se fosse nossa.</p>
+  <div class="paths"><a class="path" href="#/vagas"><small>Para profissionais</small><b>Encontre sua próxima oportunidade</b><span class="go">Buscar vagas ${ico('right', 16)}</span></a>
+  <a class="path biz" href="#/para-empresas"><small>Para empresas</small><b>Encontre os profissionais certos</b><span class="go">Encontrar talentos ${ico('right', 16)}</span></a></div>
+  <form class="hsearch" data-form="hsearch" role="search"><label>${ico('search', 18)}<input name="q" type="search" placeholder="Cargo, competência ou cidade" aria-label="Buscar vagas"></label><button class="btn pri">Buscar</button></form></div>
+  <div class="h-art reveal d2"><div class="h-photo"><img src="vinculo/img/hero.jpg" alt="Profissional sorrindo em conversa com colega em um espaço de trabalho" width="1024" height="1280"></div>
+  <div class="float f1">${avatar('Rafael Alves', 34)}<div><b>Rafael avançou</b><div class="xs mut">Entrevista RH → Cliente</div></div></div>
+  <div class="float f2"><span class="dotg"></span><div><b>3 perfis compatíveis</b><div class="xs mut">no banco de talentos</div></div></div></div></div></section>
+  <section class="sec" style="padding-top:8px"><div class="stats"><div class="stat"><b data-count="${open.length}">${open.length}</b><span>vagas abertas agora</span></div><div class="stat"><b data-count="${talents}">${talents}</b><span>perfis no banco de talentos</span></div><div class="stat"><b ${cos ? `data-count="${cos}"` : ''}>${cos || '—'}</b><span>empresas parceiras</span></div><div class="stat"><b data-count="${hired}">${hired}</b><span>contratações realizadas</span></div><a class="stat" href="https://wa.me/5581996457989" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><b style="font-size:clamp(20px,2.6vw,28px);display:flex;align-items:center;gap:10px;color:#25D366"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.4zM12 21.8c-1.8 0-3.5-.5-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4c-1-1.6-1.5-3.3-1.5-5.2C2.2 6.6 6.6 2.2 12 2.2c2.6 0 5.1 1 6.9 2.9 1.8 1.8 2.9 4.3 2.9 6.9 0 5.4-4.4 9.8-9.8 9.8zm8.4-18.2C18.1 1.3 15.2.1 12 .1 5.5.1.1 5.5.1 12c0 2.1.5 4.1 1.6 5.9L0 24l6.3-1.6c1.7.9 3.7 1.4 5.7 1.4 6.5 0 11.9-5.4 11.9-11.9 0-3.2-1.2-6.2-3.5-8.3z"/></svg>Fale Conosco</b><span>atendimento pelo WhatsApp</span></a></div></section>
+  <section class="sec"><div class="sec-h"><div><span class="eyebrow">Vagas em destaque</span><h2>Oportunidades abertas para você hoje</h2></div><a class="btn" href="#/vagas">Ver todas as vagas ${ico('right', 16)}</a></div><div class="jgrid">${open.slice(0, 6).map(j => jobCard(j).replace('<article class="card jcard">', `<article class="card jcard clk" data-href="#/vaga/${j.id}">`)).join('')}</div></section>
+  <section class="sec"><div class="split"><div><img class="tall" src="vinculo/img/talento.jpg" alt="Jovem profissional sorrindo enquanto acompanha a candidatura pelo celular" loading="lazy"></div>
+  <div><span class="eyebrow">Banco de talentos</span><h2 style="font-size:clamp(26px,3.6vw,40px);margin-top:10px">Cadastre-se uma vez. Fique no radar para sempre.</h2><p class="mut mt-s">Mesmo quando uma vaga não dá certo, seu perfil continua guardado e é lembrado para as próximas oportunidades compatíveis.</p>
+  <ul class="ticks"><li>Cadastro guiado, em poucos passos</li><li>Linha do tempo clara de cada processo</li><li>Avisos a cada mudança de etapa</li><li>Você controla seus dados (LGPD)</li></ul>
+  <div class="flex gap wrap"><a class="btn pri lg" href="#/cadastro">Cadastrar meu currículo</a><a class="btn lg" href="#/vagas">Ver oportunidades</a></div></div></div></section>
+  <section class="sec"><div class="sec-h"><div><span class="eyebrow">Como funciona</span><h2>Do cadastro à contratação, sem mistério</h2></div></div><div class="steps">
+  <div class="step"><h3>Crie seu perfil</h3><p>Experiências, formação e competências em um só lugar.</p></div><div class="step"><h3>Candidate-se</h3><p>Responda poucas perguntas e envie em minutos.</p></div><div class="step"><h3>Acompanhe</h3><p>Triagem, entrevistas e retorno visíveis na sua área.</p></div><div class="step"><h3>Comece</h3><p>Aprovado? Te ajudamos até o primeiro dia.</p></div></div></section>
+  <section class="sec"><div class="split rev"><div><img src="vinculo/img/humano.jpg" alt="Recrutadora conversando com candidata em um ambiente acolhedor" loading="lazy"></div>
+  <div><span class="eyebrow">Diferencial humano</span><h2 style="font-size:clamp(26px,3.6vw,40px);margin-top:10px">Tecnologia para agilizar. Pessoas para entender pessoas.</h2><p class="mut mt-s">Usamos triagem inteligente e análise com IA para ganhar tempo — mas cada decisão passa por recrutadores que conversam, escutam e dão retorno de verdade.</p>
+  <ul class="ticks"><li>Recrutadores dedicados a cada vaga</li><li>Feedback para todos os candidatos</li><li>Processos justos e inclusivos</li></ul></div></div></section>
+  <section class="sec"><div class="sec-h"><div><span class="eyebrow">Quem já passou por aqui</span><h2>Conexões que viraram histórias</h2></div></div><div class="qmarq"><div class="qtrack">${testimonials()}${testimonials(true)}</div></div></section>
+  <section class="sec"><div class="band"><span class="eyebrow" style="color:var(--sun)">Para empresas</span><h2 style="margin-top:10px">Precisa contratar? A gente encontra as pessoas certas.</h2><p>Recrutamento e seleção sob medida, com acesso ao nosso banco de talentos e acompanhamento de cada etapa.</p><div class="flex gap wrap mt"><a class="btn coral lg" href="#/para-empresas">Quero contratar</a><a class="btn ghostl lg" href="#/entrar">Acessar demonstração</a></div></div></section>`);
+}
+function bizPage() {
+  const talents = db.cands.filter(c => !c.deleted).length;
+  return pub(`<section class="h-hero"><div class="h-in"><div class="reveal"><span class="eyebrow">Para empresas</span><h1>Encontre os profissionais certos para sua empresa.</h1><p class="h-lead">Conte o que você precisa. Nossos recrutadores cuidam da triagem, das entrevistas e da comunicação — você só avalia quem realmente faz sentido.</p>
+  <div class="flex gap wrap"><a class="btn coral lg" href="#/entrar?next=%2Fe%2Fsolicitar">Solicitar recrutamento</a><a class="btn lg" href="https://wa.me/5581996457989?text=Ol%C3%A1!%20Quero%20falar%20com%20um%20especialista%20em%20recrutamento." target="_blank" rel="noopener">Falar com especialista</a></div></div>
+  <div class="h-art reveal d2"><div class="h-photo" style="aspect-ratio:4/3;border-radius:120px 32px 32px 32px"><img src="vinculo/img/empresas.jpg" alt="Equipe diversa colaborando em frente a um quadro" width="1280" height="960"></div><div class="float f2"><span class="dotg"></span><div><b>${talents} talentos</b><div class="xs mut">prontos no banco</div></div></div></div></div></section>
+  <section class="sec"><div class="sec-h"><div><span class="eyebrow">Como trabalhamos</span><h2>Um processo claro, do briefing à contratação</h2></div></div><div class="steps">
+  <div class="step"><h3>Solicite a vaga</h3><p>Pela sua área, em poucos campos.</p></div><div class="step"><h3>Buscamos e triamos</h3><p>Banco de talentos, divulgação e análise com IA.</p></div><div class="step"><h3>Você avalia</h3><p>Só os candidatos encaminhados, com um clique para responder.</p></div><div class="step"><h3>Contratação</h3><p>Acompanhamos até o fechamento.</p></div></div></section>
+  <section class="sec"><div class="split"><div><img src="vinculo/img/humano.jpg" alt="Recrutadora em entrevista acolhedora" loading="lazy"></div><div><span class="eyebrow">Por que o Vínculo</span><h2 style="font-size:clamp(26px,3.6vw,40px);margin-top:10px">Entendemos de pessoas — e do seu negócio.</h2>
+  <ul class="ticks"><li>Banco de talentos pesquisável e sempre atualizado</li><li>Pipeline transparente em tempo real</li><li>Dados pessoais compartilhados só quando necessário (LGPD)</li><li>Recrutadores dedicados ao seu segmento</li></ul><a class="btn pri lg" href="#/entrar?next=%2Fe%2Fsolicitar">Encontrar talentos</a></div></div></section>`);
+}
+const DEMO = [['Administrador', 'admin@vinculo.demo', 'Gerencia empresas, vagas, usuários e LGPD'], ['Recrutador', 'recrutador@vinculo.demo', 'Pipeline, triagem e banco de talentos'], ['Empresa cliente', 'empresa@grupomare.demo', 'Grupo Maré Alimentos: avalia candidatos'], ['Candidato', 'marina.souza@email.demo', 'Marina Souza: perfil e candidaturas']];
+/* ---------- Login com Google (DEMONSTRAÇÃO) ----------
+   Nível 1: o seletor de contas abaixo é SIMULADO; nenhuma conta real do Google é usada.
+   Produção: preencher GOOGLE_CLIENT_ID e trocar googlePick/googleOther por um fluxo OAuth
+   (Google Identity Services) com o token verificado em um servidor. */
+const GOOGLE_CLIENT_ID = '';
+const GOOGLE_DEMO_ACCOUNTS = [['Ana Beatriz Lima', 'ana.beatriz.demo@gmail.com'], ['Carlos Eduardo Souza', 'carlos.souza.demo@gmail.com'], ['Fernanda Alves', 'fernanda.alves.demo@gmail.com']];
+const G_LOGO = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+const googleBtn = next => `<button type="button" class="gbtn" data-act="googleSignIn" data-next="${esc(next || '')}">${G_LOGO}Continuar com Google</button>`;
+function googleContinue(name, email, next) {
+  email = String(email).trim().toLowerCase(); name = String(name).trim();
+  const ex = db.users.find(x => x.email.toLowerCase() === email);
+  if (ex) {
+    if (ex.role !== 'candidate') return toast('Este e-mail pertence a uma conta da equipe ou de empresa. Entre com e-mail e senha.', true);
+    if (ex.active === false) return toast('Esta conta está desativada.', true);
+    Sess.set(ex.id); closeModal(); toast(`Bem-vindo(a) de volta, ${ex.name.split(' ')[0]}!`);
+    return go(next && next.startsWith('/') && !next.startsWith('//') ? next : homeOf(ex));
+  }
+  ui.google = { name, email }; ui.step = 0; closeModal(); toast('Conta Google conectada. Complete seu perfil para finalizar.'); go('/cadastro');
+}
+const googleBanner = () => `<div class="note mb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span>${G_LOGO.replace('width="20" height="20"', 'width="16" height="16" style="vertical-align:-3px"')} Conectado com Google (demonstração): <b>${esc(ui.google.email)}</b>. Falta pouco: complete seus dados.</span><a href="#" data-act="googleCancel">Usar outro e-mail</a></div>`;
+function loginView(next) {
+  return pub(`<main class="wrapc narrow"><div class="g2"><div class="card"><h2 class="mb">Entrar</h2>${googleBtn(next)}<div class="orsep"><span>ou entre com e-mail e senha</span></div><form data-form="login" class="stack"><input type="hidden" name="next" value="${esc(next || '')}">
+  ${fld('E-mail', inp('email', '', { type: 'email', req: 1, attrs: 'autocomplete="username"' }))}${fld('Senha', inp('pass', '', { type: 'password', req: 1, attrs: 'autocomplete="current-password"' }))}<button class="btn pri block">Entrar</button></form>
+  <p class="sm mut mt">Ainda não tem conta? <a href="#/cadastro">Criar perfil de candidato</a></p></div>
+  <div class="card"><h3>Contas de demonstração</h3><p class="sm mut mb">Senha de todas: <span class="mono">demo123</span>. Um clique para entrar.</p><div class="stack-s">${DEMO.map(d => `<button class="btn block" style="justify-content:flex-start;height:auto;padding:10px 14px;text-align:left;white-space:normal" data-act="demoLogin" data-email="${d[1]}"><span><b>${d[0]}</b><br><span class="mut sm" style="font-weight:400">${d[2]}</span><br><span class="mono mut">${d[1]}</span></span></button>`).join('')}</div></div></div></main>`);
+}
+function registerView() {
+  const u = curUser(); if (u && u.role === 'candidate') { go('/c/perfil'); return ''; }
+  return pub(`<main class="wrapc narrow"><div class="ph"><div><h2>Crie seu perfil profissional</h2><p>Leva cerca de 5 minutos. Depois disso, candidatar-se a uma vaga leva 1 minuto.</p></div></div><div class="card">${ui.google ? '' : `${googleBtn('')}<div class="orsep"><span>ou preencha seus dados</span></div>`}${profileForm(null, 'register')}</div></main>`);
+}
+const policyView = () => pub(`<main class="wrapc narrow"><div class="card stack"><h2>Política de privacidade</h2><p class="mut sm">Versão 1.0 — texto de demonstração; deve ser revisado por assessoria jurídica antes do uso em produção.</p>
+<h3>Quais dados coletamos</h3><p>Dados cadastrais, profissionais e o currículo que você envia, além das respostas dadas nas candidaturas.</p><h3>Para que usamos</h3><p>Exclusivamente para conduzir processos seletivos, indicar seu perfil a empresas clientes quando você se candidata ou aceita um convite, e manter você no banco de talentos para futuras oportunidades, mediante seu consentimento.</p>
+<h3>Quem acessa</h3><p>Apenas recrutadores autorizados. Empresas clientes veem somente candidatos encaminhados para as vagas delas, sem telefone, e-mail ou data de nascimento. Anotações e avaliações internas nunca são exibidas a você nem à empresa.</p><h3>Seus direitos (LGPD)</h3><p>Você pode ver seus dados, corrigi-los e solicitar a exclusão a qualquer momento em <b>Meu perfil &gt; Privacidade</b>. Registramos quem acessa cada perfil.</p><h3>Decisões automatizadas</h3><p>Indicadores de aderência são apenas apoio ao recrutador. Nenhuma contratação ou reprovação é decidida automaticamente.</p></div></main>`);
+const termsView = () => pub(`<main class="wrapc narrow"><div class="card stack"><h2>Termos de uso</h2><p class="mut sm">Versão 1.0 — texto de demonstração.</p><p>Ao criar um perfil, você declara que as informações são verdadeiras e autoriza o uso delas para fins de recrutamento e seleção. A plataforma não garante contratação. Você pode encerrar seu cadastro e excluir seus dados quando quiser.</p><p>Recrutadores e empresas comprometem-se a usar os dados dos candidatos apenas para os processos seletivos para os quais foram autorizados.</p></div></main>`);
+
+/* ---------- Formulário de perfil (cadastro e edição) ---------- */
+const chipEl = v => `<span class="chip" data-v="${esc(v)}">${esc(v)}<button type="button" data-act="delChip" aria-label="Remover ${esc(v)}">×</button></span>`;
+const chipsField = (id, label, vals, hint, list) => `<div class="field"><span>${label}${hint ? ` <small>${hint}</small>` : ''}</span><div class="chips-in" data-chips="${id}">${(vals || []).map(chipEl).join('')}<input type="text" data-chipinput placeholder="Digite e pressione Enter" ${list ? `list="${list}"` : ''}></div></div>`;
+const eduRow = (e = {}) => `<div class="rep" data-group="edu">${fld('Nível', sel('level', EDU, e.level || 'Graduação'))}${fld('Curso', inp('course', e.course))}${fld('Instituição', inp('inst', e.inst))}${fld('Conclusão', inp('year', e.year, { type: 'number', attrs: 'min="1970" max="2040"' }))}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover formação">${ico('x', 16)}</button></div>`;
+const langRow = (e = {}) => `<div class="rep" data-group="lang">${fld('Idioma', sel('lang', LANGS, e.lang || 'Inglês'))}${fld('Nível', sel('level', LVL, e.level || 'Intermediário'))}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover idioma">${ico('x', 16)}</button></div>`;
+const expRow = (e = {}) => `<div class="rep" data-group="exp">${fld('Cargo', inp('role', e.role))}${fld('Empresa', inp('company', e.company))}${fld('Início', inp('from', e.from, { type: 'month' }))}${fld('Fim', inp('to', e.to, { type: 'month' }), 'vazio = atual')}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover experiência">${ico('x', 16)}</button><div class="full" style="grid-column:1/-1">${fld('O que você fazia', `<textarea name="desc" style="min-height:64px">${esc(e.desc || '')}</textarea>`)}</div></div>`;
+const ROWS = { edu: eduRow, lang: langRow, exp: expRow };
+function profileForm(c, mode) {
+  const reg = mode === 'register'; c = c || { modes: [], education: [], languages: [], exps: [], courses: [], skills: [] };
+  if (reg && ui.google) c = { ...c, name: ui.google.name, email: ui.google.email };
+  const S = (n, t, body) => `<section class="fsec ${reg && n ? 'hide' : ''}" data-step="${n}" ${reg ? '' : 'style="margin-bottom:26px"'}><h3>${t}</h3>${body}</section>`;
+  const steps = ['Dados de acesso', 'Perfil profissional', 'Formação e idiomas', 'Experiências e currículo', 'Privacidade'];
+  return `<form data-form="profile" data-mode="${mode}" novalidate-ok>${reg ? `<div class="wiz" id="wiz">${steps.map((s, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div><p class="sm mut mb" id="wiz-t">Etapa 1 de 5: ${steps[0]}</p>` : ''}
+  ${S(0, reg ? 'Dados de acesso' : 'Dados pessoais', `${reg && ui.google ? googleBanner() : ''}<div class="fg">${fld('Nome completo', inp('fullName', c.name, { req: 1 }))}${fld('E-mail', inp('email', c.email, { type: 'email', req: 1, attrs: edit(mode) + (reg && ui.google ? ' readonly' : '') }))}${reg && !ui.google ? fld('Senha', inp('pass', '', { type: 'password', req: 1, attrs: 'minlength="6" autocomplete="new-password"' }), 'mín. 6 caracteres') : ''}${fld('Telefone/WhatsApp', inp('phone', c.phone, { type: 'tel', req: 1, ph: '(81) 9 9999-9999' }))}${fld('Cidade', inp('city', c.city, { req: 1 }))}${fld('Estado', sel('state', UF, c.state || 'PE'))}${fld('Data de nascimento', inp('birth', c.birth, { type: 'date', req: 1 }))}</div>`)}
+  ${S(1, 'Perfil profissional', `<div class="fg">${fld('Cargo atual ou desejado', inp('title', c.title, { req: 1 }))}${fld('Área profissional', sel('area', AREA_LIST, c.area, 'Selecione', 'required'))}${fld('Pretensão salarial (R$)', inp('salary', c.salary, { type: 'number', attrs: 'min="0" step="100"', req: 1 }))}${fld('Disponibilidade para início', sel('avail', AVAIL, c.avail || 'Imediata'))}${fld('Disponibilidade para viagens', sel('travel', ['Sim', 'Não'], c.travel || 'Não'))}${fld('LinkedIn', inp('linkedin', c.linkedin, { type: 'url', ph: 'https://linkedin.com/in/...' }))}${fld('Portfólio/site', inp('portfolio', c.portfolio, { type: 'url', ph: 'https://' }))}</div>
+  <div class="field"><span>Modalidade desejada</span><div class="opts">${MODES.map(m => `<label><input type="checkbox" name="modes" value="${m}" ${(c.modes || []).includes(m) ? 'checked' : ''}>${m}</label>`).join('')}</div></div>
+  ${fld('Resumo profissional', `<textarea name="summary" placeholder="Conte em poucas linhas sua trajetória e o que busca.">${esc(c.summary || '')}</textarea>`)}`)}
+  ${S(2, 'Formação e idiomas', `<div class="field"><span>Formação acadêmica</span><div id="g-edu">${(c.education.length ? c.education : [{}]).map(eduRow).join('')}</div><button type="button" class="btn sm" data-act="addRow" data-g="edu">${ico('plus', 14)} Adicionar formação</button></div>
+  ${chipsField('courses', 'Cursos e certificações', c.courses, 'Enter para adicionar')}
+  <div class="field"><span>Idiomas</span><div id="g-lang">${(c.languages.length ? c.languages : [{}]).map(langRow).join('')}</div><button type="button" class="btn sm" data-act="addRow" data-g="lang">${ico('plus', 14)} Adicionar idioma</button></div>
+  ${chipsField('skills', 'Competências', c.skills, 'recomendado: 3 ou mais', 'dl-skills')}<datalist id="dl-skills">${ALL_SKILLS.map(s => `<option value="${esc(s)}">`).join('')}</datalist>`)}
+  ${S(3, 'Experiências e currículo', `<div class="field"><span>Currículo em PDF</span><input type="file" name="resume" accept="application/pdf,.pdf,.doc,.docx" data-live="resume">${c.resume ? `<small class="mut">Arquivo atual: ${esc(c.resume.name)}. Envie outro para substituir.</small>` : ''}<div class="flex gap wrap mt-s"><button type="button" class="btn sm" data-act="analyzeResume">${ico('spark', 14)} Analisar currículo (demo de IA)</button><small class="mut">Simula a extração de cargos, formação, competências e idiomas para preencher o cadastro.</small></div></div>
+  <div class="field"><span>Experiências profissionais</span><div id="g-exp">${(c.exps.length ? c.exps : [{}]).map(expRow).join('')}</div><button type="button" class="btn sm" data-act="addRow" data-g="exp">${ico('plus', 14)} Adicionar experiência</button></div>`)}
+  ${reg ? S(4, 'Privacidade e consentimento', `<div class="note">${ico('shield', 14)} Coletamos apenas o necessário para processos seletivos. Leia a <a href="#/privacidade" target="_blank">política de privacidade</a> e os <a href="#/termos" target="_blank">termos de uso</a>.</div>
+  <label class="check"><input type="checkbox" name="cTerms" required> <span>Li e aceito os termos de uso e a política de privacidade. <b>(obrigatório)</b></span></label>
+  <label class="check"><input type="checkbox" name="cStore" required> <span>Autorizo o armazenamento dos meus dados e currículo para participar de processos seletivos, inclusive de vagas futuras no banco de talentos. <b>(obrigatório)</b></span></label>
+  <label class="check"><input type="checkbox" name="cMkt"> <span>Quero receber convites para novas vagas por e-mail e WhatsApp.</span></label>`) : ''}
+  <div class="flex between gap wrap mt">${reg ? `<button type="button" class="btn" data-act="prevStep" id="btn-prev" disabled>Voltar</button><button class="btn pri" id="btn-next">Continuar</button>` : `<a class="btn" href="#/c/perfil">Cancelar</a><button class="btn pri">Salvar alterações</button>`}</div></form>`;
+}
+function edit(mode) { return mode === 'edit' ? 'readonly' : 'autocomplete="email"'; }
+
+/* ---------- Perfil (visualização) ---------- */
+function profileBody(c, mode) {
+  const yrs = candYears(c);
+  return `<div class="stack"><section class="card"><h3>Resumo profissional</h3><p>${esc(c.summary || 'Sem resumo.')}</p></section>
+  <section class="card"><h3>Experiências ${yrs ? `<span class="mut sm" style="font-weight:500">(${yTxt(yrs)} no total)</span>` : ''}</h3>${c.exps.length ? c.exps.map(e => `<div class="mt-s" style="padding-bottom:10px"><div class="b">${esc(e.role)}</div><div class="mut sm">${esc(e.company)} — ${ymTxt(e.from)} a ${e.to ? ymTxt(e.to) : 'atual'}</div><p class="sm mt-s">${esc(e.desc)}</p></div>`).join('') : '<p class="mut">Nenhuma experiência informada.</p>'}</section>
+  <div class="g2"><section class="card"><h3>Formação</h3>${c.education.length ? c.education.map(e => `<div class="mt-s"><div class="b">${esc(e.course)}</div><div class="mut sm">${esc(e.level)}, ${esc(e.inst)}${e.year ? ' (' + esc(e.year) + ')' : ''}</div></div>`).join('') : '<p class="mut">Não informada.</p>'}</section>
+  <section class="card"><h3>Idiomas</h3>${c.languages.length ? c.languages.map(l => `<div class="flex between mt-s"><span>${esc(l.lang)}</span><span class="badge">${esc(l.level)}</span></div>`).join('') : '<p class="mut">Não informado.</p>'}</section></div>
+  <div class="g2"><section class="card"><h3>Competências</h3>${chipsView(c.skills)}</section><section class="card"><h3>Cursos e certificações</h3>${c.courses.length ? ul(c.courses) : '<p class="mut">Nenhum informado.</p>'}</section></div></div>`;
+}
+function profileSide(c, mode) {
+  const row = (l, v) => `<div class="mt-s"><div class="xs mut">${l}</div><div>${v}</div></div>`;
+  const res = c.resume ? `<a href="#" class="btn sm block" data-act="openResume" data-name="${esc(c.resume.name)}">${ico('file', 14)} ${esc(c.resume.name)}</a>` : '<span class="mut">Não enviado</span>';
+  return `<div class="card"><h3>Informações</h3>${row('Pretensão salarial', `<b>${brl(c.salary)}</b>`)}${row('Disponibilidade para início', esc(c.avail))}${row('Modalidade desejada', esc((c.modes || []).join(', ') || '—'))}${row('Viagens', esc(c.travel || '—'))}
+  ${mode !== 'client' ? row('Contato', `${ico('mail', 13)} ${esc(c.email)}<br>${ico('phone', 13)} ${esc(c.phone)}`) + (mode === 'hired' ? '' : row('Nascimento', fdate(c.birth))) : row('Contato', '<span class="mut sm">Liberado apenas após a contratação.</span>')}
+  ${mode !== 'client' && (c.linkedin || c.portfolio) ? row('Links', [c.linkedin && `<a href="${esc(c.linkedin)}" target="_blank" rel="noopener">${ico('link', 13)} LinkedIn</a>`, c.portfolio && `<a href="${esc(c.portfolio)}" target="_blank" rel="noopener">${ico('link', 13)} Portfólio</a>`].filter(Boolean).join('<br>')) : ''}
+  ${row('Currículo', res)}</div>`;
+}
+function selfProfile(c) {
+  const p = completeness(c), st = candStatus(c);
+  return pub(`<main class="wrapc"><div class="cols two"><div class="stack">
+  <div class="card"><div class="flex gap-l wrap">${avatar(c.name, 72)}<div class="grow"><h1 style="font-size:28px">${esc(c.name)}</h1><p class="mut">${esc(c.title)} — ${esc(c.area)}</p><p class="sm mut mt-s">${ico('pin', 13)} ${esc(c.city)}/${c.state}</p></div><a class="btn" href="#/c/perfil/editar">${ico('edit', 14)} Editar perfil</a></div></div>
+  ${profileBody(c, 'self')}</div>
+  <aside class="stack"><div class="card"><div class="flex between"><h3 style="margin:0">Perfil ${p.pct}% completo</h3></div><div class="prog mt-s"><i style="width:${p.pct}%"></i></div>${p.missing.length ? `<p class="sm mut mt">Para melhorar suas chances, complete:</p><ul class="sm">${p.missing.slice(0, 6).map(m => `<li>${esc(m)}</li>`).join('')}</ul><a class="btn sm mt-s" href="#/c/perfil/editar">Completar agora</a>` : '<p class="sm mt" style="color:var(--green)">Tudo certo! Seu perfil está completo.</p>'}</div>
+  ${profileSide(c, 'self')}
+  <div class="card"><h3>Banco de talentos</h3><p class="sm"><span class="badge dot" style="--c:${st[1]}">${st[0]}</span></p><p class="sm mut mt-s">Seu perfil fica disponível para recrutadores em novas oportunidades. Você controla isso em <a href="#/c/privacidade">Privacidade</a>.</p></div></aside></div></main>`);
+}
+
+/* ---------- Timeline e candidaturas ---------- */
+const TL = ['Candidatura enviada', 'Triagem', 'Entrevista RH', 'Entrevista com a empresa', 'Resultado'];
+const TL_IDX = { novo: 0, triagem: 1, entrevista_rh: 2, entrevista_cliente: 3, aprovado: 4, contratado: 4 };
+function timeline(a) {
+  const closed = SIDE.includes(a.stage); const reached = Math.max(0, ...a.history.map(h => TL_IDX[h.stage] ?? -1));
+  const cur = closed ? -1 : TL_IDX[a.stage];
+  return `<ol class="tl h">${TL.map((t, i) => {
+    let cls = '', sub = '', mark = '';
+    if (closed) { if (i < reached || (i === reached && i < 4 && false)) cls = 'done'; if (i === reached) cls = 'done'; if (i === 4 || i === reached + 1) { } }
+    else if (i < cur) cls = 'done'; else if (i === cur && i < 4) cls = 'cur'; else if (i === 4 && cur === 4) cls = 'ok';
+    if (i === 4) { if (closed) { cls = 'end'; t = a.stage === 'desistiu' ? 'Encerrado (desistência)' : 'Processo encerrado'; } else if (a.stage === 'contratado') t = 'Contratado(a)'; else if (a.stage === 'aprovado') t = 'Aprovado(a)'; }
+    const h = a.history.find(x => TL_IDX[x.stage] === i && i < 4); if (h && i <= (closed ? reached : cur)) sub = `<span class="xs mut">${fdate(h.date)}</span>`;
+    if (closed && i === 4) sub = `<span class="xs mut">${fdate(a.history[a.history.length - 1].date)}</span>`;
+    if (cls === 'done' || cls === 'ok' || cls === 'end') mark = ico(cls === 'end' ? 'x' : 'check', 13);
+    return `<li class="${cls}"><span class="d">${mark}</span><div><b>${t}</b><br>${sub}</div></li>`;
+  }).join('')}</ol>`;
+}
+function myApps(c) {
+  const u = curUser(), apps = candApps(c.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const inv = db.invites.filter(i => i.candId === c.id && i.status === 'pendente');
+  return pub(`<main class="wrapc narrow"><div class="ph"><div><h2>Minhas candidaturas</h2><p>Acompanhe cada processo e veja em que etapa você está.</p></div><a class="btn" href="#/vagas">Ver mais vagas</a></div>
+  ${inv.map(i => { const j = by('jobs', i.jobId); return j ? `<div class="card mb" style="border-color:var(--sun)"><div class="flex between gap wrap"><div><span class="badge" style="--c:var(--sun)">Convite</span><h3 class="mt-s">${esc(j.title)}</h3><p class="mut sm">${esc(compName(j.companyId))} — o recrutador viu seu perfil no banco de talentos e convidou você.</p></div><a class="btn pri sm" href="#/candidatar/${j.id}">Ver vaga e candidatar-se</a></div></div>` : ''; }).join('')}
+  ${apps.length ? apps.map(a => { const j = by('jobs', a.jobId); const iv = a.interview && !CLOSED.includes(a.stage) ? `<div class="note mt">${ico('cal', 14)} Entrevista ${fdt(a.interview.date)} (${a.interview.type}${a.interview.type === 'Online' ? ', link enviado por e-mail' : ''})</div>` : ''; return `<article class="card mb"><div class="flex between gap wrap"><div><h3><a href="#/vaga/${j.id}" style="color:inherit">${esc(j.title)}</a></h3><p class="mut sm">${esc(compName(j.companyId))} — enviada em ${fdate(a.date)}</p></div><span class="badge dot" style="--c:${ST[a.stage].c}">${CAND_LABEL[a.stage]}</span></div>${timeline(a)}<p class="sm mut mt-s">${CAND_HINT[a.stage]}</p>${iv}</article>`; }).join('') : `<div class="empty">Você ainda não se candidatou. <a href="#/vagas">Explore as vagas</a></div>`}</main>`);
+}
+
+/* ---------- Candidatura ---------- */
+function applyView(jobId) {
+  const j = by('jobs', jobId); if (!j) return notFound(); const u = curUser();
+  if (!u) { go('/entrar?next=' + encodeURIComponent('/candidatar/' + jobId)); return ''; }
+  if (u.role !== 'candidate') return pub(`<main class="wrapc narrow"><div class="empty">Você está logado como <b>${ROLE_NAME[u.role]}</b>. Para se candidatar, entre com um perfil de candidato.<p class="mt"><button class="btn" data-act="logout">Sair e trocar de conta</button></p></div></main>`);
+  const c = candOf(u), exists = db.apps.find(a => a.jobId === j.id && a.candId === c.id);
+  if (exists) return pub(`<main class="wrapc narrow"><div class="empty">Você já se candidatou a esta vaga. <a href="#/c/candidaturas">Acompanhar candidatura</a></div></main>`);
+  if (j.status !== 'open') return pub(`<main class="wrapc narrow"><div class="empty">Esta vaga não está recebendo candidaturas no momento. <a href="#/vagas">Ver outras vagas</a></div></main>`);
+  const p = completeness(c);
+  const q = j.screening.map(q => `<div class="card tight" style="background:var(--card2)"><div class="field"><span>${esc(q.q)}</span>${q.type === 'yn' ? `<div class="opts"><label><input type="radio" name="q_${q.id}" value="Sim" required> Sim</label><label><input type="radio" name="q_${q.id}" value="Não"> Não</label></div>` : q.type === 'number' ? `<input name="q_${q.id}" type="number" min="0" step="100" value="${c.salary || ''}" required>` : `<textarea name="q_${q.id}" required></textarea>`}</div></div>`).join('');
+  return pub(`<main class="wrapc narrow"><p class="sm mb"><a href="#/vaga/${j.id}">← Voltar para a vaga</a></p><h2>Candidatar-se: ${esc(j.title)}</h2><p class="mut mb">${esc(compName(j.companyId))} — ${esc(j.city)}/${j.state} — ${j.mode}</p>
+  <form data-form="apply" data-job="${j.id}" class="stack"><div class="card"><div class="flex between gap wrap"><div class="flex gap">${avatar(c.name, 48)}<div><b>${esc(c.name)}</b><div class="mut sm">${esc(c.title)} — ${esc(c.city)}/${c.state}</div></div></div><a class="btn sm" href="#/c/perfil/editar">Editar perfil</a></div>
+  <div class="mt"><div class="flex between sm"><span>Perfil ${p.pct}% completo</span>${p.missing.length ? `<span class="mut">Falta: ${esc(p.missing[0])}</span>` : ''}</div><div class="prog mt-s"><i style="width:${p.pct}%"></i></div></div><p class="sm mut mt-s">Usaremos seu perfil e currículo${c.resume ? ` (${esc(c.resume.name)})` : ''} nesta candidatura.</p></div>
+  <div class="card"><h3>Complemente para esta vaga</h3><div class="fg">${fld('Pretensão salarial para esta vaga (R$)', inp('salary', c.salary, { type: 'number', req: 1, attrs: 'min="0" step="100"' }))}${fld('Disponibilidade para início', sel('avail', AVAIL, c.avail))}</div>${fld('Mensagem ao recrutador <small>(opcional)</small>', '<textarea name="note" placeholder="Por que você é uma boa escolha para esta vaga?"></textarea>')}</div>
+  ${j.screening.length ? `<div class="card"><h3>Perguntas da vaga</h3><div class="stack-s">${q}</div></div>` : ''}
+  <label class="check"><input type="checkbox" name="lgpd" required><span>Autorizo o uso dos meus dados por ${esc(compName(j.companyId))} e pelo Vínculo neste processo seletivo. <a href="#/privacidade" target="_blank">Política de privacidade</a></span></label>
+  <button class="btn pri block">Enviar candidatura</button></form></main>`);
+}
+const applyDone = j => pub(`<main class="wrapc narrow"><div class="card success"><div class="big">🎉</div><h2 class="mt">Candidatura realizada com sucesso!</h2><p class="mut mt-s" style="max-width:460px;margin-inline:auto">Você se candidatou a <b>${esc(j.title)}</b> (${esc(compName(j.companyId))}). Acompanhe cada etapa em <b>Minhas candidaturas</b>: avisaremos você a cada mudança. Seu perfil também segue no banco de talentos para futuras vagas.</p><div class="flex gap wrap mt" style="justify-content:center"><a class="btn pri" href="#/c/candidaturas">Ir para minhas candidaturas</a><a class="btn" href="#/vagas">Ver outras vagas</a></div></div></main>`);
+
+/* ---------- Privacidade do candidato e notificações ---------- */
+function privacyView(c) {
+  const req = db.delReqs.find(r => r.candId === c.id && r.status === 'pendente');
+  return pub(`<main class="wrapc narrow"><div class="ph"><div><h2>Privacidade e seus dados</h2><p>Você tem controle sobre as informações que guardamos.</p></div></div><div class="stack">
+  <div class="card"><h3>Consentimentos registrados</h3><div class="stack-s sm"><div class="flex between"><span>Termos de uso e política de privacidade</span><span class="badge" style="--c:var(--green)">Aceito em ${fdate(c.consent.date)}</span></div><div class="flex between"><span>Armazenamento no banco de talentos</span><span class="badge" style="--c:var(--green)">Autorizado</span></div><div class="flex between"><span>Convites para novas vagas</span><span class="badge" style="--c:${c.consent.marketing ? 'var(--green)' : 'var(--mut)'}">${c.consent.marketing ? 'Ativo' : 'Desativado'}</span></div></div><button class="btn sm mt" data-act="toggleMkt">${c.consent.marketing ? 'Desativar convites' : 'Ativar convites'}</button></div>
+  <div class="card"><h3>O que a equipe vê e o que não vê</h3><p class="sm mut">Recrutadores veem seu perfil completo. Empresas clientes veem apenas o necessário, sem telefone, e-mail ou data de nascimento. Anotações e avaliações internas dos recrutadores nunca aparecem para você nem para as empresas.</p></div>
+  <div class="card"><h3>Meus dados</h3><p class="sm mut mb">Veja tudo o que está guardado sobre você.</p><button class="btn" data-act="viewMyData">Ver meus dados</button></div>
+  <div class="card" style="border-color:color-mix(in srgb,var(--red) 40%,var(--line))"><h3>Excluir meus dados</h3>${req ? `<p class="note">Solicitação enviada em ${fdate(req.date)}. Nossa equipe fará a exclusão e confirmará por e-mail.</p>` : `<p class="sm mut mb">Ao solicitar a exclusão, seu perfil sai do banco de talentos e seus dados pessoais são removidos, exceto o que a lei exigir manter. Esta ação não pode ser desfeita.</p><button class="btn danger" data-act="requestDelete">Solicitar exclusão dos meus dados</button>`}</div></div></main>`);
+}
+function notifView(u) {
+  const list = db.notifs.filter(n => n.userId === u.id).slice(0, 60);
+  const c = `<div class="ph"><div><h2>Notificações</h2><p>As mesmas mensagens também são enviadas por e-mail (simulado no MVP).</p></div><button class="btn sm" data-act="readAll">Marcar todas como lidas</button></div><div class="card" style="padding:0;overflow:hidden">${list.length ? list.map(n => `<a class="nt ${n.read ? '' : 'un'}" href="#${n.link || '#'}" data-act="readOne" data-id="${n.id}"><span class="dt"></span><div class="grow">${esc(n.text)}<div class="xs mut">${ago(n.date)}</div></div></a>`).join('') : '<div class="empty" style="border:0">Nenhuma notificação por enquanto.</div>'}</div>`;
+  return u.role === 'candidate' ? pub(`<main class="wrapc narrow">${c}</main>`) : shell(c);
+}
+/* ---------- Painel (dashboard) ---------- */
+function stats() {
+  const apps = db.apps, jobs = db.jobs, live = a => !CLOSED.includes(a.stage);
+  const hires = apps.filter(a => a.stage === 'contratado'), cands = db.cands.filter(c => !c.deleted);
+  const days = hires.map(a => (new Date(a.hiredDate) - new Date(a.date)) / 864e5);
+  return {
+    open: jobs.filter(j => j.status === 'open').length, closed: jobs.filter(j => j.status === 'closed').length,
+    total: cands.length, fresh: cands.filter(c => Date.now() - new Date(c.createdAt) < 30 * 864e5).length,
+    active: uniq(apps.filter(live).map(a => a.candId)).length,
+    inter: apps.filter(a => a.interview && new Date(a.interview.date) >= new Date() && ['entrevista_rh', 'entrevista_cliente'].includes(a.stage)).length,
+    proc: apps.filter(a => ['triagem', 'entrevista_rh', 'entrevista_cliente', 'aprovado'].includes(a.stage)).length,
+    hires: hires.length, conv: apps.length ? Math.round(hires.length / apps.length * 100) : 0,
+    avgDays: days.length ? Math.round(days.reduce((a, b) => a + b, 0) / days.length) : 0
+  };
+}
+const hbars = (items, total) => { const m = Math.max(1, ...items.map(i => i.v)); return items.map(i => `<div class="hbar" style="--c:${i.c || 'var(--pri)'}"><span title="${esc(i.l)}">${esc(i.l)}</span><span class="tr"><i style="width:${Math.round(i.v / m * 100)}%"></i></span><b>${i.v}${total ? '' : ''}</b></div>`).join('') || '<p class="mut sm">Sem dados.</p>'; };
+function dashboard() {
+  const s = stats(), u = curUser(), apps = db.apps;
+  const weeks = [...Array(8)].map((_, i) => { const end = Date.now() - (7 - i) * 7 * 864e5, st = end - 7 * 864e5; return { l: i === 7 ? 'Atual' : `-${7 - i}s`, v: apps.filter(a => { const t = new Date(a.date).getTime(); return t > st && t <= end + 864e5; }).length }; });
+  const mx = Math.max(1, ...weeks.map(w => w.v)), W = 320, H = 130;
+  const svg = `<svg class="wk" viewBox="0 0 ${W} ${H}" role="img" aria-label="Novas candidaturas por semana">${weeks.map((w, i) => { const bh = Math.round((H - 34) * w.v / mx), x = 10 + i * 38; return `<rect x="${x}" y="${H - 18 - bh}" width="26" height="${bh}" rx="4"/><text class="v" x="${x + 13}" y="${H - 22 - bh}" text-anchor="middle">${w.v}</text><text x="${x + 13}" y="${H - 5}" text-anchor="middle">${w.l}</text>`; }).join('')}</svg>`;
+  const byStage = STAGES.map(st => ({ l: st.name, v: apps.filter(a => a.stage === st.id).length, c: st.c }));
+  const topJobs = db.jobs.map(j => ({ l: j.title + ' (' + compName(j.companyId).split(' ')[0] + ')', v: jobApps(j.id).length })).sort((a, b) => b.v - a.v).slice(0, 6);
+  const reached = ['novo', 'triagem', 'entrevista_rh', 'entrevista_cliente', 'aprovado', 'contratado'].map(id => ({ id, v: apps.filter(a => a.history.some(h => h.stage === id)).length }));
+  const funnel = reached.map(r => ({ l: ST[r.id].short, v: r.v, c: ST[r.id].c }));
+  const todo = [], oldNew = apps.filter(a => a.stage === 'novo' && Date.now() - new Date(a.date) > 2 * 864e5).length;
+  if (oldNew) todo.push(`<a href="#/s/triagem">${oldNew} candidaturas novas aguardam triagem há mais de 2 dias</a>`);
+  const rq = db.requests.filter(r => r.status === 'nova').length; if (rq) todo.push(`<a href="#/s/solicitacoes">${rq} solicitação de vaga de empresa cliente</a>`);
+  const cl = apps.filter(a => a.stage === 'entrevista_cliente' && !a.clientDecision).length; if (cl) todo.push(`${cl} candidatos aguardando avaliação das empresas`);
+  const dr = db.delReqs.filter(r => r.status === 'pendente').length; if (dr && u.role === 'admin') todo.push(`<a href="#/s/lgpd">${dr} pedido de exclusão de dados (LGPD)</a>`);
+  const k = (l, v, sub) => `<div class="kpi"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  return shell(`${pageHead('Olá, ' + esc(u.name.split(' ')[0]), 'Visão geral da operação de recrutamento.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a><a class="btn" href="#/s/banco">Buscar no banco</a>`)}
+  <div class="kpis">${k('Vagas abertas', s.open)}${k('Vagas encerradas', s.closed)}${k('Total de candidatos', s.total)}${k('Candidatos ativos', s.active, 'com processo em andamento')}${k('Novos (30 dias)', s.fresh)}${k('Processos em andamento', s.proc)}${k('Entrevistas agendadas', s.inter)}${k('Contratações', s.hires)}${k('Conversão', s.conv + '%', 'candidaturas em contratação')}${k('Tempo médio', s.avgDays ? s.avgDays + ' dias' : '—', 'candidatura até contratação')}</div>
+  <div class="g2 mt"><div class="card"><h3>Candidatos por etapa</h3>${hbars(byStage)}</div><div class="card"><h3>Novas candidaturas por semana</h3>${svg}</div>
+  <div class="card"><h3>Vagas com mais candidatos</h3>${hbars(topJobs)}</div><div class="card"><h3>Funil: quantos chegaram a cada etapa</h3>${hbars(funnel)}</div></div>
+  <div class="card mt"><h3>Precisa de atenção</h3>${todo.length ? `<ul>${todo.map(t => `<li>${t}</li>`).join('')}</ul>` : '<p class="mut">Nada pendente.</p>'}</div>`);
+}
+
+/* ---------- Vagas (gestão) ---------- */
+const JOB_ST = { open: ['Aberta', 'var(--green)'], draft: ['Rascunho', 'var(--mut)'], paused: ['Pausada', 'var(--sun)'], closed: ['Encerrada', 'var(--red)'] };
+const jobStBadge = s => `<span class="badge dot" style="--c:${JOB_ST[s][1]}">${JOB_ST[s][0]}</span>`;
+function jobsAdmin() {
+  const f = ui.jobsAdmin || (ui.jobsAdmin = 'all'), list = db.jobs.filter(j => f === 'all' || j.status === f).sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+  return shell(`${pageHead('Vagas', 'Crie, publique e acompanhe os processos.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a>`)}
+  <div class="opts mb">${[['all', 'Todas'], ['open', 'Abertas'], ['paused', 'Pausadas'], ['draft', 'Rascunhos'], ['closed', 'Encerradas']].map(x => `<label><input type="radio" name="jf" ${f === x[0] ? 'checked' : ''} data-act="jobsFilter" data-v="${x[0]}">${x[1]}</label>`).join('')}</div>
+  <div class="tw"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Status</th><th>Candidatos</th><th>Publicada</th><th>Responsável</th><th></th></tr></thead><tbody>${list.map(j => { const n = jobApps(j.id), r = by('users', j.recruiterId); return `<tr><td><a class="b" href="#/s/vaga/${j.id}">${esc(j.title)}</a><div class="xs mut">${esc(j.city)}/${j.state} — ${j.mode}</div></td><td>${esc(compName(j.companyId))}</td><td>${jobStBadge(j.status)}</td><td>${n.length} <span class="xs mut">(${n.filter(a => a.stage === 'novo').length} novos)</span></td><td>${j.pubDate ? fdate(j.pubDate) : '—'}</td><td>${r ? esc(r.name) : '—'}</td>
+  <td><div class="flex gap wrap" style="justify-content:flex-end"><a class="btn sm" href="#/s/vaga/${j.id}">${ico('board', 14)} Pipeline</a><a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar</a>${j.status !== 'open' && j.status !== 'closed' ? `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>` : ''}${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : ''}${j.status === 'closed' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="open">Reabrir</button>` : `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>`}<button class="btn sm ghost" data-act="dupJob" data-id="${j.id}" title="Duplicar">Duplicar</button></div></td></tr>`; }).join('')}</tbody></table></div>`);
+}
+const sqRow = (q = {}) => `<div class="rep" data-group="sq"><div style="grid-column:1/-1">${fld('Pergunta', inp('q', q.q, { ph: 'Ex.: Você possui CNH B?' }))}</div>${fld('Tipo de resposta', sel('type', [['yn', 'Sim/Não'], ['number', 'Número'], ['text', 'Texto livre']], q.type || 'yn'))}${fld('Resposta esperada', sel('expected', ['Sim', 'Não'], q.expected || 'Sim'), 'só Sim/Não')}<label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="ko" ${q.ko ? 'checked' : ''}> Eliminatória</label><button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover pergunta">${ico('x', 16)}</button></div>`;
+ROWS.sq = sqRow;
+function jobForm(id, pre) {
+  const j = id ? by('jobs', id) : null; if (id && !j) return notFound(); pre = pre || {};
+  const v = j || { companyId: pre.co || '', title: pre.title || '', area: pre.area || '', city: pre.city || 'Recife', state: 'PE', mode: pre.mode || 'Híbrido', contract: 'CLT', qty: pre.qty || 1, minExp: 1, skills: [], screening: [], resp: [], reqMand: [], reqDesir: [], benefits: [], recruiterId: curUser().role === 'recruiter' ? curUser().id : 'u_rec1', desc: pre.notes || '', deadline: '' };
+  const lines = a => esc((a || []).join('\n'));
+  const staff = db.users.filter(x => isStaff(x));
+  return shell(`${pageHead(j ? 'Editar vaga' : 'Nova vaga', j ? esc(j.title) : 'Preencha os dados e publique quando estiver pronto.')}
+  <form data-form="job" data-id="${id || ''}" data-req="${pre.req || ''}" class="stack"><div class="card"><h3>Dados principais</h3><div class="fg">${fld('Título da vaga', inp('title', v.title, { req: 1 }))}${fld('Empresa cliente', sel('companyId', db.companies.map(c => [c.id, c.name]), v.companyId, 'Selecione', 'required'))}${fld('Área', sel('area', AREA_LIST, v.area, 'Selecione', 'required'))}${fld('Recrutador responsável', sel('recruiterId', staff.map(s => [s.id, s.name]), v.recruiterId))}${fld('Cidade', inp('city', v.city, { req: 1 }))}${fld('Estado', sel('state', UF, v.state))}${fld('Modalidade', sel('mode', MODES, v.mode))}${fld('Tipo de contratação', sel('contract', CONTRACTS, v.contract))}${fld('Salário mínimo (R$)', inp('salMin', v.salMin, { type: 'number', attrs: 'min="0" step="100"' }))}${fld('Salário máximo (R$)', inp('salMax', v.salMax, { type: 'number', attrs: 'min="0" step="100"' }))}${fld('Quantidade de vagas', inp('qty', v.qty, { type: 'number', attrs: 'min="1"' }))}${fld('Prazo de candidatura', inp('deadline', v.deadline, { type: 'date' }))}</div></div>
+  <div class="card"><h3>Descrição</h3><div class="stack">${fld('Descrição da vaga', `<textarea name="desc" required>${esc(v.desc)}</textarea>`)}<div class="fg w2">${fld('Responsabilidades', `<textarea name="resp" placeholder="Uma por linha">${lines(v.resp)}</textarea>`, 'uma por linha')}${fld('Benefícios', `<textarea name="benefits" placeholder="Uma por linha">${lines(v.benefits)}</textarea>`, 'um por linha')}${fld('Requisitos obrigatórios', `<textarea name="reqMand">${lines(v.reqMand)}</textarea>`, 'um por linha')}${fld('Requisitos desejáveis', `<textarea name="reqDesir">${lines(v.reqDesir)}</textarea>`, 'um por linha')}</div></div></div>
+  <div class="card"><h3>Critérios de aderência <span class="lockchip">${ico('lock', 12)} apoio interno</span></h3><p class="sm mut mb">Usados para calcular o indicador de aderência, que apoia o recrutador e nunca decide sozinho.</p><div class="fg">${fld('Experiência mínima (anos)', inp('minExp', v.minExp, { type: 'number', attrs: 'min="0" step="0.5"' }))}<label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="degree" ${v.degree ? 'checked' : ''}> Exige ensino superior</label>${fld('Idioma exigido', sel('langName', LANGS.filter(l => l !== 'Português'), v.lang && v.lang.name, 'Nenhum'))}${fld('Nível mínimo', sel('langLevel', LVL, v.lang ? v.lang.level : 'Intermediário'))}</div><div class="mt">${chipsField('jskills', 'Competências-chave', v.skills, 'Enter para adicionar', 'dl-skills')}<datalist id="dl-skills">${ALL_SKILLS.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div></div>
+  <div class="card"><h3>Perguntas de triagem</h3><p class="sm mut mb">Perguntas marcadas como eliminatórias sinalizam candidatos que não atendem ao requisito. A decisão final continua com o recrutador.</p><div id="g-sq">${(v.screening.length ? v.screening : []).map(sqRow).join('')}</div><button type="button" class="btn sm" data-act="addRow" data-g="sq">${ico('plus', 14)} Adicionar pergunta</button></div>
+  <div class="flex gap wrap" style="justify-content:flex-end"><a class="btn" href="#/s/vagas">Cancelar</a><button class="btn" name="mode" value="draft">Salvar rascunho</button><button class="btn pri" name="mode" value="publish">${j && j.status === 'open' ? 'Salvar alterações' : 'Publicar vaga'}</button></div></form>`);
+}
+
+/* ---------- Pipeline (Kanban) ---------- */
+function kcard(a, job) {
+  const c = by('cands', a.candId), sc = AI.compare(c, job).score, ko = koFails(a, job).length, tags = (c.tags || []).slice(0, 2);
+  const cd = a.clientDecision ? ({ advance: ['Empresa aprovou', 'var(--green)'], reject: ['Empresa reprovou', 'var(--red)'], interview: ['Empresa pediu entrevista', 'var(--blue)'] })[a.clientDecision] : null;
+  return `<article class="kcard" draggable="true" data-app="${a.id}" data-act="openApp" data-cid="${c.id}"><div class="flex gap">${avatar(c.name)}<div class="grow"><div class="b">${esc(c.name)}</div><div class="xs mut">${esc(c.title)}</div></div><span class="score" title="Aderência ao perfil da vaga (apoio ao recrutador, não é decisão automática)">${sc}%</span></div>
+  <div class="kmeta"><div>${ico('pin', 12)}${esc(c.city)}/${c.state}</div><div>${ico('brief', 12)}${yTxt(candYears(c))} de experiência</div><div>Pretensão ${brl(a.salary || c.salary)}</div><div>Candidatou-se ${ago(a.date)}</div></div>
+  <div class="ktags">${ko ? `<span class="badge" style="--c:var(--red)" title="${esc(koFails(a, job).map(q => q.q).join(' | '))}">Eliminatória não atendida</span>` : ''}${a.interview && !CLOSED.includes(a.stage) ? `<span class="badge" style="--c:var(--sun)">${ico('cal', 11)} ${fdt(a.interview.date)}</span>` : ''}${cd ? `<span class="badge" style="--c:${cd[1]}">${cd[0]}</span>` : ''}${tags.map(t => `<span class="badge">${esc(t)}</span>`).join('')}</div>
+  <div class="kact"><button class="btn sm ghost" data-act="moveMenu" data-app="${a.id}" aria-label="Mover para outra etapa">${ico('dots', 16)}</button>${NEXT[a.stage] ? `<button class="btn sm" data-act="advance" data-app="${a.id}" title="Avançar para ${ST[NEXT[a.stage]].name}">${ST[NEXT[a.stage]].short} ${ico('right', 13)}</button>` : ''}</div></article>`;
+}
+function boardHtml(job) {
+  const q = strip(ui.boardq || ''), apps = jobApps(job.id).filter(a => { const c = by('cands', a.candId); return !q || strip(c.name + ' ' + c.title + ' ' + c.city).includes(q); });
+  return `<div class="board">${STAGES.map(s => { const l = apps.filter(a => a.stage === s.id).sort((x, y) => new Date(y.date) - new Date(x.date)); return `<section class="kcol ${SIDE.includes(s.id) ? 'side' : ''}" data-stage="${s.id}" style="--c:${s.c}" aria-label="${s.name}"><header><span class="badge dot" style="--c:${s.c}">${s.name}</span><b>${l.length}</b></header><div class="kbody">${l.map(a => kcard(a, job)).join('') || '<p class="empty xs" style="padding:14px 8px">Arraste candidatos para cá</p>'}</div></section>`; }).join('')}</div>`;
+}
+function pipeline(id) {
+  const j = by('jobs', id); if (!j) return notFound(); const apps = jobApps(j.id), u = curUser();
+  return shell(`<p class="sm mb"><a href="#/s/vagas">← Vagas</a></p>${pageHead(esc(j.title), `${esc(compName(j.companyId))} — ${esc(j.city)}/${j.state} — ${j.mode} — ${jobStBadge(j.status)}`, `<a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar vaga</a><a class="btn sm" href="#/s/banco" data-act="tbForJob" data-id="${j.id}">${ico('users', 14)} Buscar no banco</a>${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>`}${j.status !== 'closed' ? `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>` : ''}`)}
+  <div class="flex gap wrap mb"><div class="grow" style="max-width:340px"><input type="search" placeholder="Filtrar candidatos nesta vaga" data-live="boardq" value="${esc(ui.boardq)}" aria-label="Filtrar candidatos"></div><span class="mut sm">${apps.length} candidaturas. Arraste os cartões entre as etapas ou use os botões. O percentual é apenas apoio, nunca uma decisão.</span></div>
+  <div id="board">${boardHtml(j)}</div>`);
+}
+
+/* ---------- Triagem ---------- */
+function triRows() {
+  const f = ui.tri, job = by('jobs', f.job); if (!job) return '<div class="empty">Escolha uma vaga para começar a triagem.</div>';
+  let rows = jobApps(job.id).filter(a => (!f.stage || a.stage === f.stage)).map(a => ({ a, c: by('cands', a.candId) })).filter(r => matchCand(r.c, f));
+  if (f.ko) rows = rows.filter(r => !koFails(r.a, job).length);
+  rows = rows.map(r => ({ ...r, sc: AI.compare(r.c, job).score, ko: koFails(r.a, job) })).sort((x, y) => y.sc - x.sc);
+  const news = rows.filter(r => r.a.stage === 'novo').length;
+  return `<div class="flex between gap wrap mb"><span class="mut sm">${rows.length} candidaturas correspondem aos critérios</span>${news ? `<button class="btn sm pri" data-act="bulkTriage">Mover ${news} novos para Triagem</button>` : ''}</div>
+  <div class="tw"><table><thead><tr><th>Candidato</th><th>Cidade</th><th>Experiência</th><th>Pretensão</th><th>Inglês</th><th>Início</th><th>Eliminatórias</th><th>Aderência</th><th>Etapa</th><th></th></tr></thead><tbody>${rows.map(r => `<tr><td><div class="flex gap">${avatar(r.c.name, 30)}<a class="b" href="#/s/candidato/${r.c.id}/${r.a.id}">${esc(r.c.name)}</a></div></td><td>${esc(r.c.city)}</td><td>${yTxt(candYears(r.c))}</td><td>${brl(r.a.salary || r.c.salary)}</td><td>${(r.c.languages.find(l => l.lang === 'Inglês') || {}).level || '—'}</td><td>${esc(r.c.avail)}</td><td>${r.ko.length ? `<span class="badge" style="--c:var(--red)" title="${esc(r.ko.map(q => q.q).join(' | '))}">${r.ko.length} não atendida${r.ko.length > 1 ? 's' : ''}</span>` : '<span class="badge" style="--c:var(--green)">Todas atendidas</span>'}</td><td><span class="score">${r.sc}%</span></td><td>${stageBadge(r.a.stage)}</td>
+  <td><div class="flex gap" style="justify-content:flex-end">${r.a.stage === 'novo' ? `<button class="btn sm" data-act="moveTo" data-app="${r.a.id}" data-stage="triagem">Triagem</button>` : ''}${!CLOSED.includes(r.a.stage) ? `<button class="btn sm danger" data-act="moveTo" data-app="${r.a.id}" data-stage="reprovado">Reprovar</button>` : ''}</div></td></tr>`).join('') || '<tr><td colspan="10" class="center mut" style="padding:28px">Nenhuma candidatura com esses critérios.</td></tr>'}</tbody></table></div>`;
+}
+function triagem() {
+  const f = ui.tri, jobs = db.jobs.filter(j => j.status !== 'draft'); if (!f.job) f.job = (jobs.find(j => j.status === 'open') || jobs[0]).id;
+  const L = (n, label, inner) => `<label class="field"><span>${label}</span>${inner}</label>`;
+  return shell(`${pageHead('Triagem', 'Filtre as candidaturas de uma vaga por critérios objetivos e avance ou reprove em lote.', `<button class="btn sm" data-act="preset" data-w="tri-brief">Aplicar exemplo do briefing</button><button class="btn sm ghost" data-act="clearTri">Limpar</button>`)}
+  <div class="card mb"><div class="filters">${L('job', 'Vaga', sel('job', jobs.map(j => [j.id, j.title + ' — ' + compName(j.companyId)]), f.job, null, 'data-live="tri"'))}${L('stage', 'Etapa', sel('stage', STAGES.map(s => [s.id, s.name]), f.stage, 'Todas', 'data-live="tri"'))}${L('city', 'Cidade', sel('city', uniq(db.cands.map(c => c.city)).sort(), f.city, 'Todas', 'data-live="tri"'))}${L('minExp', 'Experiência mínima (anos)', `<input name="minExp" type="number" min="0" step="0.5" data-live="tri" value="${esc(f.minExp || '')}">`)}${L('maxSal', 'Pretensão até (R$)', `<input name="maxSal" type="number" min="0" step="100" data-live="tri" value="${esc(f.maxSal || '')}">`)}${L('lang', 'Idioma', sel('lang', LANGS, f.lang, 'Qualquer', 'data-live="tri"'))}${L('langLevel', 'Nível mínimo', sel('langLevel', LVL.map((l, i) => [i, l]), f.langLevel, 'Qualquer', 'data-live="tri"'))}${L('avail', 'Início em até', sel('avail', AVAIL.map((l, i) => [i, l]), f.avail, 'Qualquer', 'data-live="tri"'))}${L('edu', 'Formação mínima', sel('edu', EDU.map((l, i) => [i, l]), f.edu, 'Qualquer', 'data-live="tri"'))}${L('skill', 'Competência', `<input name="skill" list="dl-skills" data-live="tri" value="${esc(f.skill || '')}">`)}</div>
+  <label class="check mt"><input type="checkbox" name="ko" data-live="tri" ${f.ko ? 'checked' : ''}> Mostrar só quem atende todas as perguntas eliminatórias</label><datalist id="dl-skills">${ALL_SKILLS.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
+  <div id="tri-res">${triRows()}</div>`);
+}
+
+/* ---------- Banco de talentos ---------- */
+function parseQ(q) {
+  const terms = [], r = { terms, minExp: 0 };
+  String(q || '').split(/[+,]/).map(t => t.trim()).filter(Boolean).forEach(t => { const m = t.match(/(\d+)\s*anos?/i); if (m) r.minExp = Math.max(r.minExp, +m[1]); else terms.push(strip(t)); });
+  return r;
+}
+function matchCand(c, f) {
+  const p = parseQ(f.q), yrs = candYears(c);
+  const hay = strip([c.name, c.title, c.area, c.city, c.state, c.skills.join(' '), (c.tags || []).join(' '), c.exps.map(e => e.role).join(' ')].join(' '));
+  if (!p.terms.every(t => hay.includes(t))) return false;
+  if (p.minExp && yrs < p.minExp) return false;
+  if (f.city && c.city !== f.city) return false; if (f.area && c.area !== f.area) return false;
+  if (f.title && !strip(c.title + ' ' + c.exps.map(e => e.role).join(' ')).includes(strip(f.title))) return false;
+  if (f.minExp && yrs < +f.minExp) return false;
+  if (f.edu !== undefined && f.edu !== '' && eduRank(c) < +f.edu) return false;
+  if (f.maxSal && c.salary > +f.maxSal) return false;
+  if (f.mode && !c.modes.includes(f.mode)) return false;
+  if (f.lang) { const l = langLvl(c, f.lang); if (l < 0) return false; if (f.langLevel !== undefined && f.langLevel !== '' && l < +f.langLevel) return false; }
+  if (f.skill && !strip(c.skills.join(' ')).includes(strip(f.skill))) return false;
+  if (f.avail !== undefined && f.avail !== '' && AVAIL.indexOf(c.avail) > +f.avail) return false;
+  if (f.tag && !(c.tags || []).includes(f.tag)) return false;
+  return true;
+}
+function tbCard(c, sc, job) {
+  const st = candStatus(c), inv = job && db.invites.some(i => i.candId === c.id && i.jobId === job.id), ap = job && db.apps.some(a => a.candId === c.id && a.jobId === job.id);
+  return `<article class="card tcard"><div class="flex gap">${avatar(c.name, 44)}<div class="grow"><a class="b" href="#/s/candidato/${c.id}">${esc(c.name)}</a><div class="sm mut">${esc(c.title)}</div></div>${sc != null ? `<span class="score" title="Aderência à vaga selecionada (apoio ao recrutador)">${sc}%</span>` : ''}</div>
+  <div class="sm mut">${ico('pin', 13)} ${esc(c.city)}/${c.state} &nbsp; ${ico('brief', 13)} ${yTxt(candYears(c))} &nbsp; ${brl(c.salary)}</div>
+  <div class="flex wrap" style="gap:5px">${c.skills.slice(0, 4).map(s => `<span class="chip plain">${esc(s)}</span>`).join('')}</div>
+  <div class="flex between gap wrap"><span class="badge dot" style="--c:${st[1]}">${st[0]}</span><span class="xs mut">Início: ${esc(c.avail)}</span></div>
+  <div class="flex gap" style="margin-top:auto"><a class="btn sm grow" href="#/s/candidato/${c.id}">Ver perfil</a>${ap ? '<span class="badge" style="--c:var(--green)">Já candidato(a)</span>' : inv ? '<span class="badge" style="--c:var(--sun)">Convite enviado</span>' : `<button class="btn sm pri" data-act="inviteMenu" data-cid="${c.id}">Convidar para esta vaga</button>`}</div></article>`;
+}
+function tbResults() {
+  const f = ui.tb, job = f.job ? by('jobs', f.job) : null;
+  let rows = db.cands.filter(c => !c.deleted && !pendingDel(c.id)).filter(c => matchCand(c, f)).map(c => ({ c, sc: job ? AI.compare(c, job).score : null }));
+  rows.sort((a, b) => job ? b.sc - a.sc : a.c.name.localeCompare(b.c.name));
+  const shown = rows.slice(0, f.limit || 18);
+  return `<p class="mut sm mb">${rows.length} ${rows.length === 1 ? 'talento encontrado' : 'talentos encontrados'}${job ? ` — ordenados por aderência à vaga "${esc(job.title)}"` : ''}</p>${shown.length ? `<div class="cgrid">${shown.map(r => tbCard(r.c, r.sc, job)).join('')}</div>` : '<div class="empty">Nenhum talento com esses critérios. Tente remover algum filtro.</div>'}${rows.length > shown.length ? `<div class="center mt"><button class="btn" data-act="tbMore">Mostrar mais (${rows.length - shown.length})</button></div>` : ''}`;
+}
+function bank() {
+  const f = ui.tb, L = (n, label, inner) => `<label class="field"><span>${label}</span>${inner}</label>, `;
+  const S = (n, label, arr, ph) => `<label class="field"><span>${label}</span>${sel(n, arr, f[n], ph || 'Todos', 'data-live="tb"')}</label>`;
+  const I = (n, label, t, extra) => `<label class="field"><span>${label}</span><input name="${n}" type="${t || 'text'}" value="${esc(f[n] || '')}" data-live="tb" ${extra || ''}></label>`;
+  const jobs = db.jobs.filter(j => j.status === 'open' || j.status === 'paused');
+  return shell(`${pageHead('Banco de Talentos', 'Todos os candidatos cadastrados, independentemente da vaga em que se candidataram.', `<button class="btn sm" data-act="preset" data-w="tb-rh">Exemplo: Analista de RH + Recife + 2 anos</button><button class="btn sm ghost" data-act="clearTb">Limpar</button>`)}
+  <div class="card mb"><div class="fg w2"><label class="field"><span>Busca livre <small>(use + para combinar: "Analista de RH + Recife + 2 anos")</small></span><input name="q" type="search" data-live="tb" value="${esc(f.q || '')}" placeholder="Nome, cargo, competência, cidade, tag"></label><label class="field"><span>Vaga de referência <small>(ordena por aderência e habilita o convite)</small></span>${sel('job', jobs.map(j => [j.id, j.title + ' — ' + compName(j.companyId)]), f.job, 'Nenhuma', 'data-live="tb"')}</label></div>
+  <details class="fx mt" style="background:transparent" ${['city', 'area', 'title', 'minExp', 'edu', 'maxSal', 'mode', 'lang', 'skill', 'avail', 'tag'].some(k => f[k]) ? 'open' : ''}><summary>Filtros avançados</summary><div class="filters">${S('city', 'Cidade', uniq(db.cands.map(c => c.city)).sort())}${S('area', 'Área', AREA_LIST)}${I('title', 'Cargo')}${I('minExp', 'Experiência mínima (anos)', 'number', 'min="0" step="0.5"')}${S('edu', 'Formação mínima', EDU.map((l, i) => [i, l]), 'Qualquer')}${I('maxSal', 'Pretensão até (R$)', 'number', 'min="0" step="100"')}${S('mode', 'Modalidade', MODES)}${S('lang', 'Idioma', LANGS, 'Qualquer')}${S('langLevel', 'Nível mínimo', LVL.map((l, i) => [i, l]), 'Qualquer')}${I('skill', 'Competência', 'text', 'list="dl-skills"')}${S('avail', 'Início em até', AVAIL.map((l, i) => [i, l]), 'Qualquer')}${S('tag', 'Tag interna', TAGS)}</div><datalist id="dl-skills">${ALL_SKILLS.map(s => `<option value="${esc(s)}">`).join('')}</datalist></details></div>
+  <div id="tb-res">${tbResults()}</div>`);
+}
+
+/* ---------- Perfil do candidato (recrutador) ---------- */
+function aiPanel(c, j) {
+  if (!j) return '<p class="mut sm">Escolha uma vaga para comparar.</p>';
+  const r = AI.compare(c, j);
+  return `<div class="aibox"><div class="flex gap-l wrap"><div class="ring" style="--p:${r.score}"><b>${r.score}%</b></div><div class="grow"><b>Aderência ao perfil: ${r.score}%</b><p class="xs mut">Indicador de apoio ao recrutador. Não substitui a análise humana e nunca decide contratação ou reprovação.</p></div></div>
+  <div class="mt"><div class="b sm">Requisitos atendidos</div>${r.met.length ? r.met.map(m => `<div class="ok sm">✓ ${esc(m)}</div>`).join('') : '<div class="mut sm">Nenhum identificado.</div>'}</div>
+  <div class="mt-s"><div class="b sm mt">Pontos a verificar</div>${r.check.length ? r.check.map(m => `<div class="warn sm">⚠ ${esc(m)}</div>`).join('') : '<div class="mut sm">Nada a verificar.</div>'}</div></div>`;
+}
+function staffCand(cid, aid) {
+  const c = by('cands', cid); if (!c) return notFound(); const app = aid ? by('apps', aid) : null;
+  if (c.deleted) return shell(`<div class="empty">Os dados deste candidato foram excluídos a pedido (LGPD).</div>`);
+  audit('Perfil visualizado', c.name);
+  const apps = candApps(c.id).sort((a, b) => new Date(b.date) - new Date(a.date)), evals = db.evals.filter(e => e.candId === c.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const st = candStatus(c), jid = ui.cmp[c.id] || (app ? app.jobId : (apps[0] || {}).jobId) || '', job = jid ? by('jobs', jid) : null;
+  const hist = apps.map(a => { const j = by('jobs', a.jobId); return { t: a.date, job: j.title, co: compName(j.companyId), res: a.stage === 'contratado' ? 'Contratado' : a.stage === 'reprovado' ? 'Não avançou' : a.stage === 'desistiu' ? 'Desistiu' : 'Em andamento: ' + ST[a.stage].name, cur: !CLOSED.includes(a.stage) }; }).concat((c.pastHistory || []).map(p => ({ t: p.date, job: p.job, co: p.company, res: p.result }))).sort((a, b) => new Date(b.t) - new Date(a.t));
+  const appPanel = app ? (() => { const j = by('jobs', app.jobId), fails = koFails(app, j); return `<div class="card" style="border-color:var(--pri)"><div class="flex between gap wrap"><div><span class="xs mut">Candidatura selecionada</span><h3 style="margin:0">${esc(j.title)}</h3><span class="sm mut">${esc(compName(j.companyId))}</span></div>${stageBadge(app.stage)}</div>
+  <div class="mt"><div class="xs mut mb" style="margin-bottom:6px">Mover para</div><div class="flex wrap" style="gap:6px">${STAGES.map(s => `<button class="btn sm ${s.id === app.stage ? 'pri' : ''}" ${s.id === app.stage ? 'disabled' : ''} data-act="moveTo" data-app="${app.id}" data-stage="${s.id}">${s.short}</button>`).join('')}</div></div>
+  ${app.interview ? `<div class="note mt">${ico('cal', 14)} Entrevista: ${fdt(app.interview.date)} (${app.interview.type})</div>` : ''}${app.stage === 'entrevista_rh' || app.stage === 'entrevista_cliente' ? `<button class="btn sm mt-s" data-act="scheduleMenu" data-app="${app.id}">${ico('cal', 14)} ${app.interview ? 'Reagendar' : 'Agendar'} entrevista</button>` : ''}
+  ${app.stage === 'aprovado' ? `<button class="btn pri mt-s block" data-act="moveTo" data-app="${app.id}" data-stage="contratado">Marcar como contratado</button>` : ''}
+  ${app.clientDecision ? `<div class="mt"><span class="xs mut">Decisão da empresa</span><div>${({ advance: 'Aprovou o candidato', reject: 'Reprovou o candidato', interview: 'Solicitou entrevista' })[app.clientDecision]}</div>${(app.clientFeedback || []).map(f => `<div class="bubble sm mt-s">${esc(f.text)}<div class="xs mut">${fdate(f.date)}</div></div>`).join('')}</div>` : ''}
+  <div class="mt"><div class="b sm">Respostas de triagem</div>${j.screening.map(q => { const v = app.answers[q.id], bad = q.ko && q.type === 'yn' && v !== q.expected; return `<div class="qa mt-s ${bad ? 'bad' : ''}"><div class="sm">${esc(q.q)} ${q.ko ? '<span class="badge" style="--c:var(--red)">Eliminatória</span>' : ''}</div><div class="b sm">${esc(v ?? '—')}${bad ? ' — esperado: ' + q.expected : ''}</div></div>`; }).join('') || '<p class="mut sm">Sem perguntas.</p>'}${app.note ? `<div class="bubble sm mt-s"><b>Mensagem do candidato:</b> ${esc(app.note)}</div>` : ''}</div></div>`; })() : '';
+  return shell(`<p class="sm mb"><a href="javascript:history.back()">← Voltar</a></p><div class="cols two"><div class="stack">
+  <div class="card"><div class="flex gap-l wrap">${avatar(c.name, 72)}<div class="grow"><h1 style="font-size:28px">${esc(c.name)}</h1><p class="mut">${esc(c.title)} — ${esc(c.area)}</p><div class="flex wrap gap mt-s"><span class="badge dot" style="--c:${st[1]}">${st[0]}</span><span class="sm mut">${ico('pin', 13)} ${esc(c.city)}/${c.state}</span><span class="sm mut">${ico('brief', 13)} ${yTxt(candYears(c))}</span></div></div><div class="flex gap wrap"><button class="btn sm" data-act="contactMenu" data-cid="${c.id}" data-ch="email">${ico('mail', 14)} E-mail</button><button class="btn sm" data-act="contactMenu" data-cid="${c.id}" data-ch="whatsapp">${ico('phone', 14)} WhatsApp</button><button class="btn sm pri" data-act="inviteMenu" data-cid="${c.id}">Convidar para vaga</button></div></div></div>
+  ${appPanel}${profileBody(c, 'staff')}
+  <div class="card"><h3>Histórico</h3>${hist.length ? `<ul class="tl" style="margin:0">${hist.map(h => `<li class="${h.cur ? 'cur' : 'done'}"><span class="d"></span><div><b>Candidatou-se à vaga de ${esc(h.job)}</b> <span class="mut sm">(${esc(h.co)})</span><br><span class="sm mut">Data: ${fdate(h.t)}. Resultado: ${esc(h.res)}</span></div></li>`).join('')}</ul>` : '<p class="mut">Sem histórico de candidaturas.</p>'}</div></div>
+  <aside class="stack">${profileSide(c, 'staff')}
+  <div class="card"><h3>Aderência a uma vaga</h3>${sel('cmp', db.jobs.map(j => [j.id, j.title + ' — ' + compName(j.companyId)]), jid, 'Escolha a vaga', `data-act="cmpJob" data-cid="${c.id}"`)}<div class="mt">${aiPanel(c, job)}</div></div>
+  <div class="card" style="background:var(--sun-soft);border-color:transparent"><div class="flex between"><h3 style="margin:0">Uso interno</h3><span class="lockchip">${ico('lock', 12)} invisível ao candidato e à empresa</span></div>
+  <div class="mt"><div class="xs mut">Tags</div><div class="flex wrap mt-s" style="gap:6px">${(c.tags || []).map(t => `<span class="chip">${esc(t)}<button type="button" data-act="delTag" data-cid="${c.id}" data-t="${esc(t)}" aria-label="Remover ${esc(t)}">×</button></span>`).join('') || '<span class="mut sm">Sem tags</span>'}</div><form data-form="addTag" data-cid="${c.id}" class="flex gap mt-s"><input name="t" list="dl-tags" placeholder="Nova tag" aria-label="Nova tag"><datalist id="dl-tags">${TAGS.map(t => `<option value="${esc(t)}">`).join('')}</datalist><button class="btn sm">Adicionar</button></form></div>
+  <div class="mt"><label class="field"><span>Anotações internas</span><textarea data-live="note" data-cid="${c.id}" style="background:var(--card)" placeholder="Salvas automaticamente">${esc(c.notes || '')}</textarea></label></div></div>
+  <div class="card"><div class="flex between"><h3 style="margin:0">Avaliações <span class="lockchip">${ico('lock', 12)} interno</span></h3><button class="btn sm pri" data-act="evalMenu" data-cid="${c.id}" data-app="${app ? app.id : ''}">Registrar</button></div>${evals.length ? evals.map(e => `<div class="bubble mt"><div class="flex between sm"><b>${esc(by('jobs', e.jobId) ? by('jobs', e.jobId).title : '—')}</b><span class="mut">${fdate(e.date)} — ${esc(e.by)}</span></div><p class="sm mt-s"><b>Pontos positivos:</b> ${esc(e.pos)}</p><p class="sm"><b>Pontos de atenção:</b> ${esc(e.attn)}</p><p class="sm"><b>Entrevista:</b> ${esc(e.notes)}</p><p class="sm mut">Técnica ${e.tech}/5 — Comportamental ${e.behav}/5 — Pretensão ${brl(e.salary)} — Início ${esc(e.avail)}</p><div class="flex wrap mt-s" style="gap:5px">${(e.tags || []).map(t => `<span class="chip plain">${esc(t)}</span>`).join('')}</div></div>`).join('') : '<p class="mut sm mt">Nenhuma avaliação registrada.</p>'}</div></aside></div>`);
+}
+
+/* ---------- Admin: empresas, usuários, solicitações, comunicações, IA, LGPD ---------- */
+function companies() {
+  return shell(`${pageHead('Empresas clientes', 'Cadastre empresas e crie o acesso do contato responsável.', `<button class="btn pri" data-act="companyMenu">${ico('plus', 16)} Nova empresa</button>`)}
+  <div class="tw"><table><thead><tr><th>Empresa</th><th>Setor</th><th>Cidade</th><th>Contato / acesso</th><th>Vagas</th><th></th></tr></thead><tbody>${db.companies.map(c => `<tr><td class="b">${esc(c.name)}</td><td>${esc(c.sector)}</td><td>${esc(c.city)}/${c.state}</td><td>${esc(c.contact)}<div class="xs mut mono">${esc(c.email)}</div></td><td>${db.jobs.filter(j => j.companyId === c.id).length}</td><td style="text-align:right"><a class="btn sm" href="#/s/vaga/nova?co=${c.id}">Nova vaga</a></td></tr>`).join('')}</tbody></table></div>`);
+}
+const PERMS = [['Ver painel e vagas', 1, 1, 1, 0], ['Criar/editar/publicar vagas', 1, 1, 0, 0], ['Pipeline e triagem', 1, 1, 0, 0], ['Banco de talentos completo', 1, 1, 0, 0], ['Avaliações e anotações internas', 1, 1, 0, 0], ['Ver candidatos encaminhados e decidir', 1, 0, 1, 0], ['Solicitar abertura de vaga', 1, 0, 1, 0], ['Empresas, usuários e LGPD', 1, 0, 0, 0], ['Editar próprio perfil e candidaturas', 0, 0, 0, 1]];
+function usersView() {
+  return shell(`${pageHead('Usuários e acessos', 'Cada perfil enxerga apenas o que precisa.', `<button class="btn pri" data-act="userMenu">${ico('plus', 16)} Novo usuário interno</button>`)}
+  <div class="card mb"><h3>Matriz de permissões</h3><div class="tw" style="border:0"><table><thead><tr><th>Permissão</th><th>Admin</th><th>Recrutador</th><th>Empresa</th><th>Candidato</th></tr></thead><tbody>${PERMS.map(p => `<tr><td>${p[0]}</td>${p.slice(1).map(v => `<td>${v ? '<span style="color:var(--green)">✓</span>' : '<span class="mut">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
+  <div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Empresa</th><th>Status</th><th></th></tr></thead><tbody>${db.users.filter(u => u.role !== 'candidate').map(u => `<tr><td class="b">${esc(u.name)}</td><td class="mono">${esc(u.email)}</td><td><span class="badge">${ROLE_NAME[u.role]}</span></td><td>${u.companyId ? esc(compName(u.companyId)) : '—'}</td><td>${u.active === false ? '<span class="badge" style="--c:var(--red)">Inativo</span>' : '<span class="badge" style="--c:var(--green)">Ativo</span>'}</td><td style="text-align:right">${u.id !== curUser().id ? `<button class="btn sm" data-act="toggleUser" data-id="${u.id}">${u.active === false ? 'Reativar' : 'Desativar'}</button>` : ''}</td></tr>`).join('')}</tbody></table></div><p class="sm mut mt">${db.users.filter(u => u.role === 'candidate').length} contas de candidatos não são listadas aqui por privacidade.</p>`);
+}
+function requestsView() {
+  return shell(`${pageHead('Solicitações de vaga', 'Pedidos enviados pelas empresas clientes.')}${db.requests.length ? db.requests.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map(r => `<div class="card mb"><div class="flex between gap wrap"><div><h3>${esc(r.title)}</h3><p class="mut sm">${esc(compName(r.companyId))} — ${esc(r.city || '')} — ${r.qty} ${r.qty > 1 ? 'posições' : 'posição'} — ${esc(r.mode || '')} — enviada ${ago(r.date)}</p></div><span class="badge dot" style="--c:${r.status === 'nova' ? 'var(--blue)' : 'var(--green)'}">${r.status === 'nova' ? 'Nova' : 'Convertida em vaga'}</span></div>${r.salary ? `<p class="sm mt-s">Faixa desejada: ${esc(r.salary)}</p>` : ''}<p class="sm mt-s">${esc(r.notes || '')}</p>${r.status === 'nova' ? `<a class="btn pri sm mt" href="#/s/vaga/nova?req=${r.id}">Criar vaga a partir desta solicitação</a>` : ''}</div>`).join('') : '<div class="empty">Nenhuma solicitação.</div>'}`);
+}
+function commsView() {
+  const INT = [['E-mail', 'Simulado: registra na caixa de saída abaixo', 'Resend / SendGrid via backend'], ['WhatsApp', 'Simulado: registra mensagem', 'WhatsApp Business API'], ['Calendário', 'Simulado: guarda data e tipo', 'Google Calendar / Microsoft Graph'], ['Inteligência artificial', 'Regras determinísticas locais', 'API de LLM chamada no servidor'], ['Armazenamento de currículos', 'Guarda apenas metadados do arquivo', 'S3 / Supabase Storage com URL assinada'], ['Autenticação', 'Usuário e senha locais de demonstração', 'Supabase Auth / Auth0 com hash e 2FA'], ['Cobrança', 'Plano: ' + Billing.plan, 'Stripe / Asaas por empresa cliente']];
+  return shell(`${pageHead('Comunicações e integrações', 'Tudo o que o sistema enviaria por e-mail ou WhatsApp aparece aqui no MVP.')}
+  <div class="card mb"><h3>Integrações (camada mock, substituível)</h3><div class="tw" style="border:0"><table><thead><tr><th>Serviço</th><th>No MVP</th><th>Em produção</th></tr></thead><tbody>${INT.map(i => `<tr><td class="b">${i[0]}</td><td>${i[1]}</td><td class="mut">${i[2]}</td></tr>`).join('')}</tbody></table></div></div>
+  <h3 class="mb">Caixa de saída (fictícia)</h3><div class="tw"><table><thead><tr><th>Canal</th><th>Para</th><th>Assunto</th><th>Quando</th></tr></thead><tbody>${db.outbox.slice(0, 40).map(m => `<tr><td><span class="badge">${m.channel === 'email' ? 'E-mail' : 'WhatsApp'}</span></td><td class="mono">${esc(m.to)}</td><td>${esc(m.subject)}<div class="xs mut">${esc(m.body).slice(0, 110)}</div></td><td class="xs">${fdt(m.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="center mut" style="padding:24px">Nada enviado ainda.</td></tr>'}</tbody></table></div>`);
+}
+function aiLab() {
+  const r = ui.aiResult, cands = db.cands.filter(c => !c.deleted);
+  const cid = ui.aiCand || cands[0].id, jid = ui.aiJob || 'j1', c = by('cands', cid), j = by('jobs', jid);
+  return shell(`${pageHead('Análise com IA (demonstração)', 'Estrutura pronta para integrar um modelo de IA de verdade. Aqui, os resultados são simulados por regras.')}
+  <div class="g2"><div class="card"><h3>1. Analisar currículo</h3><p class="sm mut mb">Envie um PDF e veja quais dados seriam extraídos automaticamente.</p><form data-form="aiParse" class="stack"><input type="file" name="cv" accept=".pdf,.doc,.docx" required><button class="btn pri">${ico('spark', 14)} Analisar currículo</button></form>
+  ${r ? `<div class="aibox mt"><b>${esc(r.file)}</b><div class="sm mt-s"><b>Cargo mais recente:</b> ${esc(r.title)}<br><b>Área:</b> ${esc(r.area)}<br><b>Tempo de experiência:</b> ${r.years} anos<br><b>Formação:</b> ${r.education.map(e => esc(e.level + ' em ' + e.course + ', ' + e.inst)).join('; ')}<br><b>Idiomas:</b> ${r.languages.map(l => esc(l.lang + ' (' + l.level + ')')).join(', ')}<br><b>Cargos anteriores:</b> ${r.exps.map(e => esc(e.role)).join('; ')}<br><b>Competências:</b> ${r.skills.map(esc).join(', ')}</div><p class="xs mut mt-s">Os dados extraídos sempre passam por confirmação do candidato ou do recrutador.</p></div>` : ''}</div>
+  <div class="card"><h3>2. Comparar candidato com vaga</h3><div class="fg">${fld('Candidato', sel('c', cands.map(x => [x.id, x.name + ' — ' + x.title]), cid, null, 'data-act="aiSel" data-k="aiCand"'))}${fld('Vaga', sel('j', db.jobs.map(x => [x.id, x.title + ' — ' + compName(x.companyId)]), jid, null, 'data-act="aiSel" data-k="aiJob"'))}</div><div class="mt">${aiPanel(c, j)}</div></div></div>
+  <div class="note mt">${ico('spark', 14)} Arquitetura: <span class="mono">AI.provider = "${AI.provider}"</span>. Para usar um modelo real, implemente <span class="mono">parseResume</span> e <span class="mono">compare</span> no backend e troque o provider. O indicador é sempre apoio, nunca decisão automática.</div>`);
+}
+function lgpdView() {
+  const dr = db.delReqs.slice().sort((a, b) => new Date(b.date) - new Date(a.date)), cs = db.cands.filter(c => !c.deleted);
+  return shell(`${pageHead('Privacidade (LGPD)', 'Consentimentos, pedidos de exclusão e registro de acessos.')}
+  <div class="kpis mb"><div class="kpi"><span>Perfis com consentimento</span><b>${cs.length}</b></div><div class="kpi"><span>Aceitam convites</span><b>${cs.filter(c => c.consent.marketing).length}</b></div><div class="kpi"><span>Pedidos pendentes</span><b>${dr.filter(r => r.status === 'pendente').length}</b></div></div>
+  <div class="card mb"><h3>Pedidos de exclusão</h3>${dr.length ? `<div class="tw" style="border:0"><table><thead><tr><th>Candidato</th><th>Solicitado em</th><th>Status</th><th></th></tr></thead><tbody>${dr.map(r => { const c = by('cands', r.candId); return `<tr><td>${c && !c.deleted ? esc(c.name) : 'Dados removidos'}</td><td>${fdate(r.date)}</td><td><span class="badge" style="--c:${r.status === 'pendente' ? 'var(--sun)' : 'var(--green)'}">${r.status === 'pendente' ? 'Pendente' : 'Concluído'}</span></td><td style="text-align:right">${r.status === 'pendente' ? `<button class="btn sm danger" data-act="execDelete" data-id="${r.id}">Excluir dados agora</button>` : ''}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="mut">Nenhum pedido.</p>'}</div>
+  <div class="card"><h3>Registro de acessos a perfis</h3>${db.audit.length ? `<div class="tw" style="border:0"><table><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Referência</th></tr></thead><tbody>${db.audit.slice(0, 30).map(a => `<tr><td class="xs">${fdt(a.date)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.ref)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="mut">Ainda sem acessos registrados. Abra o perfil de um candidato para ver o registro.</p>'}</div>`);
+}
+
+/* ---------- Empresa cliente ---------- */
+const clientVisible = a => a.forwarded || ['entrevista_cliente', 'aprovado', 'contratado'].includes(a.stage);
+function clientHome(u) {
+  const jobs = db.jobs.filter(j => j.companyId === u.companyId), reqs = db.requests.filter(r => r.companyId === u.companyId);
+  const pend = db.apps.filter(a => jobs.some(j => j.id === a.jobId) && clientVisible(a) && a.stage === 'entrevista_cliente' && !a.clientDecision).length;
+  return shell(`${pageHead(esc(compName(u.companyId)), 'Acompanhe suas vagas e avalie os candidatos encaminhados.', `<a class="btn pri" href="#/e/solicitar">${ico('plus', 16)} Solicitar vaga</a>`)}
+  <div class="kpis mb"><div class="kpi"><span>Vagas abertas</span><b>${jobs.filter(j => j.status === 'open').length}</b></div><div class="kpi"><span>Candidatos encaminhados</span><b>${db.apps.filter(a => jobs.some(j => j.id === a.jobId) && clientVisible(a)).length}</b></div><div class="kpi"><span>Aguardando sua avaliação</span><b>${pend}</b></div><div class="kpi"><span>Contratações</span><b>${db.apps.filter(a => jobs.some(j => j.id === a.jobId) && a.stage === 'contratado').length}</b></div></div>
+  <h3 class="mb">Suas vagas</h3>${jobs.length ? `<div class="jgrid">${jobs.map(j => { const fw = jobApps(j.id).filter(clientVisible), pd = fw.filter(a => a.stage === 'entrevista_cliente' && !a.clientDecision).length; return `<a class="card jcard" href="#/e/vaga/${j.id}" style="text-decoration:none;color:inherit"><div class="flex between gap"><h3 style="margin:0">${esc(j.title)}</h3>${jobStBadge(j.status)}</div><p class="mut sm">${esc(j.city)}/${j.state} — ${j.mode} — ${salRange(j)}</p><div class="flex gap wrap"><span class="badge">${fw.length} encaminhados</span>${pd ? `<span class="badge" style="--c:var(--sun)">${pd} aguardando você</span>` : ''}</div></a>`; }).join('')}</div>` : '<div class="empty">Você ainda não tem vagas. Solicite a primeira.</div>'}
+  ${reqs.length ? `<h3 class="mb mt">Suas solicitações</h3><div class="tw"><table><tbody>${reqs.map(r => `<tr><td class="b">${esc(r.title)}</td><td>${r.qty} posição(ões)</td><td>${ago(r.date)}</td><td><span class="badge" style="--c:${r.status === 'nova' ? 'var(--blue)' : 'var(--green)'}">${r.status === 'nova' ? 'Em análise pelo recrutador' : 'Vaga criada'}</span></td></tr>`).join('')}</tbody></table></div>` : ''}`);
+}
+function clientJob(u, id) {
+  const j = by('jobs', id); if (!j || j.companyId !== u.companyId) return denied();
+  const list = jobApps(j.id).filter(clientVisible).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const dec = { advance: ['Aprovado por você', 'var(--green)'], reject: ['Reprovado por você', 'var(--red)'], interview: ['Entrevista solicitada', 'var(--blue)'] };
+  return shell(`<p class="sm mb"><a href="#/e/painel">← Painel</a></p>${pageHead(esc(j.title), `${esc(j.city)}/${j.state} — ${j.mode} — ${salRange(j)} — ${jobStBadge(j.status)}`)}
+  <p class="mut mb">Candidatos encaminhados pelo recrutador. Você vê apenas o necessário para decidir; dados de contato são liberados após a contratação.</p>
+  ${list.length ? `<div class="cgrid">${list.map(a => { const c = by('cands', a.candId), d = a.clientDecision && dec[a.clientDecision]; return `<article class="card tcard"><div class="flex gap">${avatar(c.name, 44)}<div class="grow"><div class="b">${esc(c.name)}</div><div class="sm mut">${esc(c.title)}</div></div></div><div class="sm mut">${ico('pin', 13)} ${esc(c.city)}/${c.state} &nbsp; ${ico('brief', 13)} ${yTxt(candYears(c))} &nbsp; ${brl(a.salary || c.salary)}</div><div class="flex wrap" style="gap:5px">${c.skills.slice(0, 4).map(s => `<span class="chip plain">${esc(s)}</span>`).join('')}</div>
+  <div class="flex gap wrap">${a.stage === 'contratado' ? '<span class="badge dot" style="--c:var(--pri)">Contratado</span>' : d ? `<span class="badge dot" style="--c:${d[1]}">${d[0]}</span>` : '<span class="badge dot" style="--c:var(--sun)">Aguardando sua avaliação</span>'}${a.interview && !CLOSED.includes(a.stage) ? `<span class="badge">${ico('cal', 11)} ${fdt(a.interview.date)}</span>` : ''}</div>
+  <div class="flex gap wrap" style="margin-top:auto"><button class="btn sm pri" data-act="clientView" data-app="${a.id}">Ver perfil e decidir</button></div></article>`; }).join('')}</div>` : '<div class="empty">Ainda não há candidatos encaminhados para esta vaga. Avisaremos você assim que o recrutador enviar os primeiros perfis.</div>'}`);
+}
+function clientRequest() {
+  const u = curUser(), co = by('companies', u.companyId);
+  return shell(`${pageHead('Solicitar abertura de vaga', 'Conte o que você precisa; o recrutador responsável monta a vaga com você.')}<form class="card stack" data-form="request"><div class="fg">${fld('Cargo', inp('title', '', { req: 1, ph: 'Ex.: Gerente Comercial' }))}${fld('Área', sel('area', AREA_LIST, '', 'Selecione', 'required'))}${fld('Quantidade', inp('qty', 1, { type: 'number', req: 1, attrs: 'min="1"' }))}${fld('Cidade', inp('city', co.city, { req: 1 }))}${fld('Modalidade', sel('mode', MODES, 'Presencial'))}${fld('Faixa salarial', inp('salary', '', { ph: 'Ex.: R$ 4.000 a R$ 5.500' }))}</div>${fld('Descreva a necessidade', '<textarea name="notes" required placeholder="Responsabilidades, requisitos e prazo desejado"></textarea>')}<div><button class="btn pri">Enviar solicitação</button></div></form>`);
+}
+/* ---------- 7. Roteador ---------- */
+let rendering = false;
+function parse() {
+  const raw = (location.hash || '#/').slice(1), [p, q] = raw.split('?');
+  const parts = p.split('/').filter(Boolean);
+  return { parts, query: Object.fromEntries(new URLSearchParams(q || '')) };
+}
+function go(path) {
+  if (location.hash === '#' + path) { if (!rendering) render(); } else location.hash = path;
+}
+function route() {
+  const { parts, query } = parse(), u = curUser(), [a, b, c] = parts;
+  if (a !== 'cadastro') ui.google = null;
+  const needLogin = () => { go('/entrar?next=' + encodeURIComponent('/' + parts.join('/'))); return ''; };
+  if (!a) return landing();
+  if (a === 'para-empresas') return bizPage();
+  switch (a) {
+    case 'vagas': return jobsPublic();
+    case 'vaga': return jobDetail(b);
+    case 'entrar': if (u) { go(homeOf(u)); return ''; } return loginView(query.next);
+    case 'cadastro': return registerView();
+    case 'privacidade': return policyView();
+    case 'termos': return termsView();
+    case 'candidatar':
+      if (ui.doneJob === b && by('jobs', b)) { const j = by('jobs', b); ui.doneJob = null; return applyDone(j); }
+      return applyView(b);
+    case 'c': {
+      if (!u) return needLogin(); if (u.role !== 'candidate') return denied();
+      const cand = candOf(u); if (!cand || cand.deleted) return denied();
+      if (b === 'perfil') return c === 'editar' ? pub(`<main class="wrapc narrow"><div class="ph"><div><h2>Editar perfil</h2><p>Mantenha seus dados atualizados para receber melhores oportunidades.</p></div></div><div class="card">${profileForm(cand, 'edit')}</div></main>`) : selfProfile(cand);
+      if (b === 'candidaturas') return myApps(cand);
+      if (b === 'notificacoes') return notifView(u);
+      if (b === 'privacidade') return privacyView(cand);
+      return notFound();
+    }
+    case 's': {
+      if (!u) return needLogin(); if (!isStaff(u)) return denied();
+      const adminOnly = ['empresas', 'usuarios', 'lgpd'];
+      if (adminOnly.includes(b) && u.role !== 'admin') return denied();
+      switch (b) {
+        case 'dashboard': return dashboard();
+        case 'vagas': return jobsAdmin();
+        case 'vaga':
+          if (c === 'nova') {
+            let pre = { co: query.co || '' };
+            if (query.req) { const r = by('requests', query.req); if (r) pre = { co: r.companyId, req: r.id, title: r.title, area: r.area, city: r.city, mode: r.mode, qty: r.qty, notes: r.notes }; }
+            return jobForm(null, pre);
+          }
+          return parts[3] === 'editar' ? jobForm(c) : pipeline(c);
+        case 'triagem': return triagem();
+        case 'banco': return bank();
+        case 'candidato': return staffCand(c, parts[3]);
+        case 'empresas': return companies();
+        case 'usuarios': return usersView();
+        case 'solicitacoes': return requestsView();
+        case 'comunicacoes': return commsView();
+        case 'ia': return aiLab();
+        case 'lgpd': return lgpdView();
+        case 'notificacoes': return notifView(u);
+        default: return notFound();
+      }
+    }
+    case 'e': {
+      if (!u) return needLogin(); if (u.role !== 'client') return denied();
+      if (b === 'painel') return clientHome(u);
+      if (b === 'vaga') return clientJob(u, c);
+      if (b === 'solicitar') return clientRequest();
+      if (b === 'notificacoes') return notifView(u);
+      return notFound();
+    }
+    default: return notFound();
+  }
+}
+function showStep(n) {
+  const steps = ['Dados de acesso', 'Perfil profissional', 'Formação e idiomas', 'Experiências e currículo', 'Privacidade'];
+  ui.step = n;
+  $$('[data-step]').forEach(s => s.classList.toggle('hide', +s.dataset.step !== n));
+  $$('#wiz i').forEach((i, k) => i.classList.toggle('on', k <= n));
+  const t = $('#wiz-t'); if (t) t.textContent = `Etapa ${n + 1} de 5: ${steps[n]}`;
+  const p = $('#btn-prev'), nx = $('#btn-next'); if (p) p.disabled = n === 0; if (nx) nx.textContent = n === 4 ? 'Criar meu perfil' : 'Continuar';
+}
+/* ---------- Animações de rolagem, contadores e vagas clicáveis ---------- */
+let fxIO = null, cntIO = null;
+const reduceMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+const fmtN = n => (+n || 0).toLocaleString('pt-BR');
+function runCount(el) {
+  const to = +el.dataset.count || 0, dur = 1600, t0 = performance.now();
+  const step = t => { const k = Math.min(1, (t - t0) / dur); el.textContent = fmtN(Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+function initFX() {
+  if (fxIO) fxIO.disconnect(); if (cntIO) cntIO.disconnect();
+  const counters = $$('#app [data-count]'), targets = $$('#app .sec-h, #app .stat, #app .step, #app .sec .jcard, #app .split > div, #app .band');
+  if (!('IntersectionObserver' in window) || reduceMotion()) { counters.forEach(el => { el.textContent = fmtN(el.dataset.count); }); return; }
+  cntIO = new IntersectionObserver((es, o) => es.forEach(e => { if (e.isIntersecting) { o.unobserve(e.target); runCount(e.target); } }), { threshold: 0.6 });
+  counters.forEach(el => { el.textContent = '0'; cntIO.observe(el); });
+  fxIO = new IntersectionObserver((es, o) => es.forEach(e => {
+    if (!e.isIntersecting) return; const el = e.target; o.unobserve(el); el.classList.add('sfx-in');
+    setTimeout(() => el.classList.remove('sfx', 'sfx-in'), 1100 + (parseFloat(el.style.getPropertyValue('--fxd')) || 0) * 1000);
+  }), { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
+  targets.forEach(el => {
+    const sibs = el.parentElement ? [...el.parentElement.children].filter(c => targets.includes(c)) : [el];
+    el.style.setProperty('--fxd', (Math.min(sibs.indexOf(el), 5) * 0.09).toFixed(2) + 's'); el.classList.add('sfx'); fxIO.observe(el);
+  });
+}
+document.addEventListener('click', e => {
+  const c = e.target.closest('.jcard[data-href]');
+  if (!c || e.target.closest('a,button,input,select,textarea,label')) return;
+  go(c.dataset.href.slice(1));
+});
+
+function render(keep) {
+  const y = window.scrollY; let html; rendering = true;
+  try { html = route(); }
+  catch (e) { console.error(e); html = pub(`<main class="wrapc narrow"><div class="empty"><b>Não foi possível carregar esta página.</b><p class="mt-s"><a href="#/">Voltar ao início</a></p></div></main>`); }
+  rendering = false;
+  if (html === '' || html == null) return;
+  $('#app').innerHTML = html;
+  $$('[data-form]').forEach(f => { f.noValidate = true; });
+  if ($('#wiz')) showStep(ui.step || 0);
+  window.scrollTo(0, keep ? y : 0);
+  initFX();
+}
+const refresh = (sel, fn) => { const el = $(sel); if (el) el.innerHTML = fn(); };
+
+/* ---------- Modal e avisos ---------- */
+function openModal(title, body, wide) {
+  $('#modal-root').innerHTML = `<div class="ov"><div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h3 style="margin:0">${esc(title)}</h3><button type="button" class="iconbtn" data-act="closeModal" aria-label="Fechar">${ico('x')}</button></header>${body}</div></div>`;
+  $$('#modal-root [data-form]').forEach(f => { f.noValidate = true; });
+  const f = $('#modal-root input:not([type=hidden]):not([type=checkbox]), #modal-root textarea'); if (f) f.focus();
+}
+const closeModal = () => { $('#modal-root').innerHTML = ''; };
+function toast(msg, err) {
+  const el = document.createElement('div'); el.className = 'toast' + (err ? ' err' : ''); el.textContent = msg; $('#toasts').appendChild(el);
+  setTimeout(() => el.remove(), err ? 4200 : 3000);
+}
+const confirmBox = (title, text, btnLabel, act, data, danger) => openModal(title, `<p>${text}</p><div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="button" class="btn ${danger ? 'danger' : 'pri'}" data-act="${act}" ${Object.entries(data || {}).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ')}>${btnLabel}</button></div>`);
+
+function validate(root) {
+  for (const el of $$('input,select,textarea', root)) {
+    if (el.hasAttribute('data-chipinput') || el.disabled || el.type === 'hidden') continue;
+    if (!el.checkValidity()) { el.reportValidity(); return false; }
+  }
+  return true;
+}
+function addChip(inp) {
+  const v = inp.value.replace(/,/g, '').trim(); inp.value = ''; if (!v) return;
+  const box = inp.closest('[data-chips]'); if ($$('.chip', box).some(c => c.dataset.v.toLowerCase() === v.toLowerCase())) return;
+  inp.insertAdjacentHTML('beforebegin', chipEl(v));
+}
+const chipsOf = (root, id) => { const box = $(`[data-chips="${id}"]`, root); if (!box) return []; const i = $('[data-chipinput]', box); if (i) addChip(i); return $$('.chip', box).map(c => c.dataset.v); };
+const rowsOf = (root, g) => $$(`.rep[data-group="${g}"]`, root).map(r => Object.fromEntries($$('[name]', r).map(el => [el.name, el.type === 'checkbox' ? el.checked : el.value.trim()])));
+const localDT = d => { const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+/* ---------- Movimentação de candidaturas ---------- */
+function moveApp(id, stage) {
+  const a = by('apps', id); if (!a || a.stage === stage) return;
+  const job = by('jobs', a.jobId), c = by('cands', a.candId), u = curUser();
+  a.stage = stage; a.history.push({ stage, date: nowISO(), by: u ? u.name : '—' });
+  if (stage === 'entrevista_rh' || stage === 'entrevista_cliente') a.interview = null;
+  if (stage === 'entrevista_cliente') {
+    a.forwarded = true; a.clientDecision = null;
+    clientsOf(job.companyId).forEach(cu => notify(cu.id, `Um novo candidato foi encaminhado para a vaga ${job.title}.`, '/e/vaga/' + job.id));
+  }
+  if (stage === 'contratado') {
+    a.hiredDate = nowISO();
+    clientsOf(job.companyId).forEach(cu => notify(cu.id, `${c.name} foi contratado(a) para ${job.title}. Os dados de contato foram liberados.`, '/e/vaga/' + job.id));
+  }
+  const cu = candUser(c); if (cu) notify(cu.id, CAND_MSG[stage].replace('{job}', job.title), '/c/candidaturas');
+  audit('Etapa alterada', `${c.name} → ${ST[stage].name} (${job.title})`); save();
+}
+function requestMove(id, stage) {
+  const a = by('apps', id); if (!a || a.stage === stage) return;
+  const job = by('jobs', a.jobId), c = by('cands', a.candId);
+  if (SIDE.includes(stage)) { confirmBox('Confirmar movimentação', `Mover <b>${esc(c.name)}</b> para <b>${ST[stage].name}</b> na vaga ${esc(job.title)}? O candidato será avisado e continua no banco de talentos.`, 'Confirmar', 'confirmMove', { app: id, stage }, true); return; }
+  doMove(id, stage);
+}
+function doMove(id, stage) {
+  moveApp(id, stage); render(true);
+  const a = by('apps', id);
+  toast(`${by('cands', a.candId).name} → ${ST[stage].name}`);
+  if ((stage === 'entrevista_rh' || stage === 'entrevista_cliente') && !a.interview) openSchedule(id);
+}
+function openSchedule(id) {
+  const a = by('apps', id), c = by('cands', a.candId), job = by('jobs', a.jobId), d = new Date(Date.now() + 864e5); d.setHours(10, 0, 0, 0);
+  openModal('Agendar entrevista', `<p class="sm mut mb">${esc(c.name)} — ${esc(job.title)}</p><form data-form="schedule" data-app="${id}" class="stack">${fld('Data e horário', inp('when', localDT(a.interview ? new Date(a.interview.date) : d), { type: 'datetime-local', req: 1 }))}${fld('Formato', sel('type', ['Online', 'Presencial'], a.interview ? a.interview.type : 'Online'))}<p class="xs mut">O candidato recebe aviso e e-mail com a data${a.stage === 'entrevista_cliente' ? '; a empresa também é avisada' : ''}. Convite de calendário simulado.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Agora não</button><button class="btn pri">Agendar</button></div></form>`);
+}
+
+/* ---------- Ações (data-act) ---------- */
+const actions = {
+  googleSignIn(t) {
+    const next = t.dataset.next || '';
+    openModal('Escolher uma conta', `<div class="note mb">${ico('shield', 14)} <b>Demonstração:</b> nenhuma conta real do Google é usada. Escolha uma conta de exemplo para ver o fluxo.</div><p class="sm mut mb">Continuar para o <b>Vínculo</b></p><div class="stack-s">${GOOGLE_DEMO_ACCOUNTS.map(([n, e]) => `<button type="button" class="btn block" style="justify-content:flex-start;height:auto;padding:10px 14px;text-align:left" data-act="googlePick" data-name="${esc(n)}" data-email="${esc(e)}" data-next="${esc(next)}">${avatar(n, 34)}<span><b>${esc(n)}</b><br><span class="mut sm" style="font-weight:400">${esc(e)}</span>${db.users.some(x => x.email.toLowerCase() === e) ? ' <span class="badge">já cadastrado</span>' : ''}</span></button>`).join('')}</div>
+    <details class="mt"><summary class="sm b" style="cursor:pointer">Usar outra conta</summary><form data-form="googleOther" data-next="${esc(next)}" class="stack mt-s">${fld('Nome', inp('name', '', { req: 1 }))}${fld('E-mail', inp('email', '', { type: 'email', req: 1 }))}<button class="btn pri">Continuar</button></form></details>`);
+  },
+  googlePick(t) { googleContinue(t.dataset.name, t.dataset.email, t.dataset.next); },
+  googleCancel() { ui.google = null; render(true); },
+  closeModal, closeSide() { ui.side = false; const a = $('.app'); if (a) a.classList.remove('open'); },
+  openSide() { ui.side = true; const a = $('.app'); if (a) a.classList.add('open'); },
+  logout() { Auth.logout(); ui.side = false; closeModal(); if (location.hash === '#/') render(); else go('/'); toast('Você saiu da conta.'); },
+  demoLogin(t) { const u = Auth.login(t.dataset.email, 'demo123'); if (!u) return toast('Conta de demonstração indisponível. Restaure os dados.', true); toast(`Bem-vindo(a), ${u.name.split(' ')[0]}!`); go(homeOf(u)); },
+  reset() { confirmBox('Restaurar dados de demonstração', 'Todos os dados criados neste navegador serão apagados e os dados de exemplo voltam ao estado inicial.', 'Restaurar', 'doReset', {}, true); },
+  doReset() { Persist.clear(); db = seedDB(); Sess.set(null); save(); Object.assign(ui, { jobs: {}, tb: { limit: 18 }, tri: { stage: 'novo' }, boardq: '', cmp: {}, aiResult: null }); closeModal(); if (location.hash === '#/' || !location.hash) render(); else go('/'); toast('Dados de demonstração restaurados.'); },
+  addRow(t) { const g = t.dataset.g, box = $('#g-' + g); if (box && ROWS[g]) box.insertAdjacentHTML('beforeend', ROWS[g]({})); },
+  delRow(t) { const r = t.closest('.rep'); if (r) r.remove(); },
+  delChip(t) { const c = t.closest('.chip'); if (c) c.remove(); },
+  prevStep() { if ((ui.step || 0) > 0) { showStep(ui.step - 1); window.scrollTo(0, 0); } },
+  analyzeResume(t) {
+    const form = t.closest('form'), file = $('input[name=resume]', form).files[0], name = file ? file.name : 'curriculo_exemplo.pdf';
+    const r = AI.parseResume(name), setv = (n, v) => { const el = $(`[name=${n}]`, form); if (el && !el.value) el.value = v; };
+    setv('title', r.title); const ar = $('select[name=area]', form); if (ar && !ar.value) ar.value = r.area;
+    const fill = (g, list) => { const box = $('#g-' + g, form); if (box) box.innerHTML = list.map(ROWS[g]).join(''); };
+    fill('edu', r.education); fill('lang', r.languages); fill('exp', r.exps);
+    const addAll = (id, list) => { const i = $(`[data-chips="${id}"] [data-chipinput]`, form); if (i) list.forEach(v => { i.value = v; addChip(i); }); };
+    addAll('skills', r.skills); addAll('courses', r.certs);
+    toast(file ? 'Dados sugeridos pela IA (simulada). Revise antes de salvar.' : 'Nenhum arquivo escolhido: usei um currículo de exemplo. Revise os dados.');
+  },
+  openResume(t) {
+    const u = curUser(); if (isStaff(u)) audit('Currículo aberto', t.dataset.name);
+    openModal('Currículo', `<div class="card" style="background:var(--card2)"><div class="flex gap">${ico('file', 28)}<div><b>${esc(t.dataset.name)}</b><p class="sm mut">Pré-visualização simulada.</p></div></div></div><p class="sm mut mt">No MVP apenas os metadados do arquivo são guardados (nome, tamanho, data). Em produção, o PDF ficaria em armazenamento seguro com link temporário de acesso, disponível somente a quem tem permissão.</p>`);
+  },
+  jobStatus(t) {
+    const j = by('jobs', t.dataset.id), v = t.dataset.v; j.status = v; if (v === 'open' && !j.pubDate) j.pubDate = nowISO();
+    audit('Vaga ' + ({ open: 'publicada', paused: 'pausada', closed: 'encerrada' }[v] || 'atualizada'), j.title); save(); render(true);
+    toast({ open: 'Vaga publicada.', paused: 'Vaga pausada.', closed: 'Vaga encerrada.', draft: 'Vaga em rascunho.' }[v]);
+  },
+  dupJob(t) {
+    const j = by('jobs', t.dataset.id), n = JSON.parse(JSON.stringify(j));
+    n.id = uid('j'); n.title = j.title + ' (cópia)'; n.status = 'draft'; n.pubDate = null; n.screening.forEach(q => { q.id = uid('q'); });
+    db.jobs.push(n); save(); toast('Vaga duplicada como rascunho.'); go('/s/vaga/' + n.id + '/editar');
+  },
+  jobsFilter(t) { ui.jobsAdmin = t.dataset.v; render(true); },
+  clearJobs() { ui.jobs = {}; render(true); },
+  toggleMkt() { const c = candOf(curUser()); c.consent.marketing = !c.consent.marketing; save(); render(true); toast(c.consent.marketing ? 'Você passará a receber convites.' : 'Você não receberá mais convites.'); },
+  requestDelete() { confirmBox('Solicitar exclusão dos meus dados', 'Seu perfil sai do banco de talentos e nossa equipe fará a exclusão dos seus dados pessoais. Esta ação não pode ser desfeita depois de concluída.', 'Solicitar exclusão', 'confirmDelete', {}, true); },
+  confirmDelete() {
+    const c = candOf(curUser()); if (!pendingDel(c.id)) db.delReqs.push({ id: uid('dr'), candId: c.id, date: nowISO(), status: 'pendente' });
+    db.users.filter(x => x.role === 'admin').forEach(x => notify(x.id, `Novo pedido de exclusão de dados (LGPD): ${c.name}.`, '/s/lgpd'));
+    save(); closeModal(); render(true); toast('Pedido enviado.');
+  },
+  viewMyData() {
+    const c = candOf(curUser()), data = { perfil: { ...c, tags: undefined, notes: undefined }, candidaturas: candApps(c.id).map(a => ({ vaga: (by('jobs', a.jobId) || {}).title, etapa: ST[a.stage].name, data: a.date, respostas: a.answers })), pedidosDeExclusao: db.delReqs.filter(r => r.candId === c.id) };
+    openModal('Meus dados', `<p class="sm mut mb">Cópia dos dados pessoais guardados sobre você. Anotações e avaliações internas da equipe não fazem parte desta visualização.</p><pre class="mono sm" style="white-space:pre-wrap;word-break:break-word;max-height:52vh;overflow:auto;background:var(--card2);padding:12px;border-radius:10px">${esc(JSON.stringify(data, null, 2))}</pre>`, true);
+  },
+  readAll() { const u = curUser(); db.notifs.filter(n => n.userId === u.id).forEach(n => { n.read = true; }); save(); render(true); },
+  readOne(t) { const n = db.notifs.find(x => x.id === t.dataset.id); if (n && !n.read) { n.read = true; save(); if (!n.link) render(true); } },
+  openApp(t) { go('/s/candidato/' + t.dataset.cid + '/' + t.dataset.app); },
+  advance(t) { const a = by('apps', t.dataset.app); if (a && NEXT[a.stage]) requestMove(a.id, NEXT[a.stage]); },
+  moveMenu(t) {
+    const a = by('apps', t.dataset.app), c = by('cands', a.candId);
+    openModal('Mover candidato', `<p class="sm mut mb">${esc(c.name)} — etapa atual: <b>${ST[a.stage].name}</b></p><div class="stack-s">${STAGES.map(s => `<button type="button" class="btn block ${s.id === a.stage ? 'pri' : ''}" style="justify-content:flex-start" ${s.id === a.stage ? 'disabled' : ''} data-act="moveTo" data-app="${a.id}" data-stage="${s.id}"><span class="badge dot" style="--c:${s.c}">${s.name}</span></button>`).join('')}</div>`);
+  },
+  moveTo(t) { closeModal(); requestMove(t.dataset.app, t.dataset.stage); },
+  confirmMove(t) { closeModal(); doMove(t.dataset.app, t.dataset.stage); },
+  scheduleMenu(t) { openSchedule(t.dataset.app); },
+  bulkTriage() {
+    const f = ui.tri, job = by('jobs', f.job); if (!job) return;
+    const list = jobApps(job.id).filter(a => a.stage === 'novo' && (!f.stage || f.stage === 'novo') && matchCand(by('cands', a.candId), f) && (!f.ko || !koFails(a, job).length));
+    list.forEach(a => moveApp(a.id, 'triagem')); render(true); toast(list.length ? `${list.length} candidaturas movidas para Triagem.` : 'Nenhuma candidatura nova para mover.');
+  },
+  tbForJob(t) { ui.tb.job = t.dataset.id; ui.tb.limit = 18; },
+  tbMore() { ui.tb.limit = (ui.tb.limit || 18) + 18; refresh('#tb-res', tbResults); },
+  clearTb() { ui.tb = { limit: 18 }; render(true); },
+  clearTri() { ui.tri = { job: ui.tri.job, stage: 'novo' }; render(true); },
+  preset(t) {
+    if (t.dataset.w === 'tb-rh') { ui.tb = { limit: 18, q: 'Analista de RH + Recife + 2 anos', job: 'j1' }; }
+    else { ui.tri = { job: 'j1', stage: '', city: 'Recife', minExp: '2', ko: true, lang: 'Inglês', langLevel: '1' }; }
+    render(true);
+  },
+  inviteMenu(t) {
+    const c = by('cands', t.dataset.cid), jobs = db.jobs.filter(j => j.status === 'open');
+    openModal('Convidar para uma vaga', `<p class="sm mut mb">${esc(c.name)} — ${esc(c.title)}</p><form data-form="invite" data-cid="${c.id}" class="stack">${fld('Vaga', sel('jobId', jobs.map(j => [j.id, j.title + ' — ' + compName(j.companyId)]), ui.tb.job || '', null, 'required'))}${fld('Mensagem', `<textarea name="msg">Olá, ${esc(c.name.split(' ')[0])}! Seu perfil no nosso banco de talentos combina com uma vaga que estamos conduzindo. Tem interesse em participar do processo?</textarea>`)}${c.consent.marketing ? '' : `<div class="note">${ico('shield', 14)} Este candidato não autorizou convites por e-mail e WhatsApp. O convite aparecerá apenas na conta dele.</div>`}<div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Enviar convite</button></div></form>`);
+  },
+  cmpJob(t) { ui.cmp[t.dataset.cid] = t.value; render(true); },
+  aiSel(t) { ui[t.dataset.k] = t.value; render(true); },
+  contactMenu(t) {
+    const c = by('cands', t.dataset.cid), ch = t.dataset.ch, em = ch === 'email';
+    openModal(em ? 'Enviar e-mail' : 'Enviar WhatsApp', `<p class="sm mut mb">Para: ${esc(c.name)} — ${esc(em ? c.email : c.phone)}</p><form data-form="message" data-cid="${c.id}" data-ch="${ch}" class="stack">${em ? fld('Assunto', inp('subject', '', { req: 1 })) : ''}${fld('Mensagem', '<textarea name="body" required></textarea>')}<p class="xs mut">Envio simulado: a mensagem é registrada em Comunicações.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Enviar</button></div></form>`);
+  },
+  evalMenu(t) {
+    const c = by('cands', t.dataset.cid), apps = candApps(c.id), cur = t.dataset.app ? by('apps', t.dataset.app) : null;
+    if (!apps.length) return toast('Este candidato ainda não tem candidaturas para avaliar.', true);
+    const n15 = [1, 2, 3, 4, 5];
+    openModal('Registrar avaliação', `<p class="sm mut mb"><span class="lockchip">${ico('lock', 12)} interno</span> Visível apenas para a equipe. Nunca aparece para o candidato ou para a empresa.</p><form data-form="eval" data-cid="${c.id}" class="stack">${fld('Candidatura', sel('appId', apps.map(a => [a.id, by('jobs', a.jobId).title]), cur ? cur.id : apps[0].id))}
+    ${fld('Pontos positivos', '<textarea name="pos" required></textarea>')}${fld('Pontos de atenção', '<textarea name="attn"></textarea>')}${fld('Observações da entrevista', '<textarea name="notes"></textarea>')}
+    <div class="fg">${fld('Nota técnica (1 a 5)', sel('tech', n15, 4))}${fld('Nota comportamental (1 a 5)', sel('behav', n15, 4))}${fld('Pretensão (R$)', inp('salary', c.salary, { type: 'number' }))}${fld('Disponibilidade', sel('avail', AVAIL, c.avail))}</div>
+    <div class="field"><span>Tags</span><div class="opts">${TAGS.map(x => `<label><input type="checkbox" name="tags" value="${esc(x)}" ${(c.tags || []).includes(x) ? 'checked' : ''}>${esc(x)}</label>`).join('')}</div></div>
+    <div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Salvar avaliação</button></div></form>`, true);
+  },
+  delTag(t) { const c = by('cands', t.dataset.cid); c.tags = (c.tags || []).filter(x => x !== t.dataset.t); save(); render(true); },
+  companyMenu() {
+    openModal('Nova empresa cliente', `<form data-form="company" class="stack"><div class="fg">${fld('Nome da empresa', inp('name', '', { req: 1 }))}${fld('Setor', inp('sector', '', { req: 1 }))}${fld('Cidade', inp('city', '', { req: 1 }))}${fld('Estado', sel('state', UF, 'PE'))}${fld('Contato responsável', inp('contact', '', { req: 1 }))}${fld('E-mail de acesso', inp('email', '', { type: 'email', req: 1 }))}</div><p class="xs mut">Criamos um acesso de empresa cliente para o contato, com a senha de demonstração <span class="mono">demo123</span>.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar empresa e acesso</button></div></form>`);
+  },
+  userMenu() {
+    openModal('Novo usuário interno', `<form data-form="user" class="stack"><div class="fg">${fld('Nome', inp('name', '', { req: 1 }))}${fld('E-mail', inp('email', '', { type: 'email', req: 1 }))}${fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], 'recruiter'))}${fld('Senha inicial', inp('pass', 'demo123', { req: 1, attrs: 'minlength="6"' }))}</div><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar usuário</button></div></form>`);
+  },
+  toggleUser(t) { const u = by('users', t.dataset.id); u.active = u.active === false; audit(u.active ? 'Usuário reativado' : 'Usuário desativado', u.email); save(); render(true); },
+  execDelete(t) {
+    const req = by('delReqs', t.dataset.id) || db.delReqs.find(r => r.id === t.dataset.id), id = req.candId, c = by('cands', id);
+    confirmBox('Excluir dados agora', `Os dados pessoais de <b>${esc(c.name)}</b>, incluindo currículo, candidaturas e avaliações, serão removidos definitivamente.`, 'Excluir definitivamente', 'confirmExec', { id: req.id }, true);
+  },
+  confirmExec(t) {
+    const req = db.delReqs.find(r => r.id === t.dataset.id), id = req.candId, c = by('cands', id), cu = candUser(c);
+    Object.assign(c, { name: 'Candidato removido', email: '', phone: '', birth: '', linkedin: '', portfolio: '', title: '', summary: '', city: '', state: '', resume: null, exps: [], education: [], courses: [], languages: [], skills: [], tags: [], notes: '', pastHistory: [], modes: [], salary: 0, deleted: true, consent: { terms: false, storage: false, marketing: false, date: nowISO(), version: '1.0' } });
+    if (cu) { cu.active = false; cu.name = 'Removido'; cu.email = `excluido+${id}@removido.invalid`; cu.pass = uid('x'); db.notifs = db.notifs.filter(n => n.userId !== cu.id); }
+    db.apps = db.apps.filter(a => a.candId !== id); db.evals = db.evals.filter(e => e.candId !== id); db.invites = db.invites.filter(i => i.candId !== id);
+    req.status = 'concluido'; audit('Dados excluídos (LGPD)', 'Candidato ' + id); save(); closeModal(); render(true); toast('Dados excluídos e anonimizados.');
+  },
+  clientView(t) {
+    const u = curUser(), a = by('apps', t.dataset.app), job = a && by('jobs', a.jobId);
+    if (!a || !job || job.companyId !== u.companyId || !clientVisible(a)) return toast('Acesso não permitido.', true);
+    const c = by('cands', a.candId), hired = a.stage === 'contratado', decided = { advance: 'Você aprovou este candidato.', reject: 'Você reprovou este candidato.', interview: 'Você solicitou uma entrevista.' }[a.clientDecision];
+    const canDecide = a.stage === 'entrevista_cliente';
+    openModal(c.name, `<div class="stack"><div class="flex gap-l wrap">${avatar(c.name, 56)}<div class="grow"><p class="mut">${esc(c.title)} — ${esc(c.area)}</p><p class="sm mut">${ico('pin', 13)} ${esc(c.city)}/${c.state}</p></div></div>
+    ${a.interview && !CLOSED.includes(a.stage) ? `<div class="note">${ico('cal', 14)} Entrevista: ${fdt(a.interview.date)} (${a.interview.type})</div>` : ''}
+    ${profileSide(c, hired ? 'hired' : 'client')}${profileBody(c, 'client')}
+    ${(a.clientFeedback || []).length ? `<div class="card"><h3>Seus comentários</h3>${a.clientFeedback.map(f => `<div class="bubble sm mt-s">${esc(f.text)}<div class="xs mut">${fdate(f.date)}</div></div>`).join('')}</div>` : ''}
+    ${canDecide ? `<div class="card" style="border-color:var(--pri)"><h3>Sua decisão</h3>${decided ? `<p class="note mb">${decided} Você pode alterar a decisão abaixo.</p>` : ''}<label class="field"><span>Comentário para o recrutador <small>(opcional)</small></span><textarea id="cf-text" placeholder="Ex.: Gostei do perfil, queremos conversar na quinta."></textarea></label><div class="flex gap wrap mt"><button type="button" class="btn pri" data-act="clientDecide" data-app="${a.id}" data-v="advance">${ico('check', 14)} Aprovar</button><button type="button" class="btn" data-act="clientDecide" data-app="${a.id}" data-v="interview">${ico('cal', 14)} Solicitar entrevista</button><button type="button" class="btn danger" data-act="clientDecide" data-app="${a.id}" data-v="reject">Reprovar</button></div></div>` : `<div class="note">${hired ? 'Candidato contratado. Dados de contato liberados.' : (decided || 'Aguardando próximos passos do recrutador.')}</div>`}</div>`, true);
+  },
+  clientDecide(t) {
+    const u = curUser(), a = by('apps', t.dataset.app), job = by('jobs', a.jobId), c = by('cands', a.candId), v = t.dataset.v, box = $('#cf-text'), text = box ? box.value.trim() : '';
+    a.clientDecision = v; if (text) (a.clientFeedback = a.clientFeedback || []).push({ text, date: nowISO(), by: u.name });
+    const verb = { advance: 'aprovou', reject: 'reprovou', interview: 'solicitou entrevista com' }[v];
+    notify(job.recruiterId, `${compName(job.companyId)} ${verb} ${c.name} (${job.title})${text ? ': ' + text.slice(0, 80) : '.'}`, '/s/vaga/' + job.id);
+    audit('Decisão da empresa: ' + verb, c.name); save(); closeModal(); render(true); toast('Decisão registrada. O recrutador foi avisado.');
+  }
+};
+
+/* ---------- Formulários (data-form) ---------- */
+const forms = {
+  googleOther(f) { if (!validate(f)) return; const fd = new FormData(f); googleContinue(fd.get('name'), fd.get('email'), f.dataset.next); },
+  login(f) {
+    const fd = new FormData(f), u = Auth.login(fd.get('email'), fd.get('pass'));
+    if (!u) return toast('E-mail ou senha incorretos.', true);
+    const next = String(fd.get('next') || ''); toast(`Bem-vindo(a), ${u.name.split(' ')[0]}!`);
+    go(next.startsWith('/') && !next.startsWith('//') ? next : homeOf(u));
+  },
+  profile(f) {
+    const reg = f.dataset.mode === 'register';
+    if (reg) {
+      const n = ui.step || 0, sec = $(`[data-step="${n}"]`, f);
+      if (!validate(sec)) return;
+      if (n === 0) { const em = $('input[name=email]', f).value.trim().toLowerCase(); if (db.users.some(x => x.email.toLowerCase() === em)) return toast('Já existe uma conta com este e-mail. Entre para continuar.', true); }
+      if (n < 4) { showStep(n + 1); window.scrollTo(0, 0); return; }
+    } else if (!validate(f)) return;
+    const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), file = $('input[name=resume]', f).files[0];
+    const langs = []; rowsOf(f, 'lang').forEach(l => { if (l.lang && !langs.some(x => x.lang === l.lang)) langs.push({ lang: l.lang, level: l.level }); });
+    const data = {
+      name: g('fullName'), phone: g('phone'), city: g('city'), state: g('state'), birth: g('birth'), linkedin: g('linkedin'), portfolio: g('portfolio'),
+      title: g('title'), area: g('area'), salary: +g('salary') || 0, avail: g('avail'), travel: g('travel'), modes: fd.getAll('modes'), summary: g('summary'),
+      education: rowsOf(f, 'edu').filter(r => r.course || r.inst), languages: langs, exps: rowsOf(f, 'exp').filter(r => r.role || r.company),
+      courses: chipsOf(f, 'courses'), skills: chipsOf(f, 'skills')
+    };
+    if (reg) {
+      const email = g('email').toLowerCase(), id = uid('ca');
+      const c = { id, email, ...data, resume: FileStore.put(file), tags: [], notes: '', pastHistory: [], consent: { terms: true, storage: true, marketing: !!fd.get('cMkt'), date: nowISO(), version: '1.0' }, createdAt: nowISO(), deleted: false };
+      const u = { id: 'u_' + id, role: 'candidate', name: c.name, email, pass: ui.google ? uid('g') : g('pass'), candId: id, active: true, ...(ui.google ? { google: true } : {}) };
+      db.cands.push(c); db.users.push(u); Sess.set(u.id); ui.google = null;
+      notify(u.id, 'Bem-vindo(a) ao Vínculo! Seu perfil já está no banco de talentos.', '/c/perfil');
+      db.users.filter(x => isStaff(x) && x.role === 'recruiter').forEach(x => notify(x.id, `Novo perfil no banco de talentos: ${c.name} (${c.area}).`, '/s/candidato/' + id));
+      save(); toast('Perfil criado! Agora você pode se candidatar às vagas.'); go('/vagas');
+    } else {
+      const c = candOf(curUser()); Object.assign(c, data); if (file) c.resume = FileStore.put(file);
+      curUser().name = c.name; save(); toast('Perfil atualizado.'); go('/c/perfil');
+    }
+  },
+  apply(f) {
+    if (!validate(f)) return;
+    const u = curUser(), c = candOf(u), job = by('jobs', f.dataset.job), fd = new FormData(f);
+    if (!job || job.status !== 'open') return toast('Esta vaga não está mais recebendo candidaturas.', true);
+    if (db.apps.some(a => a.jobId === job.id && a.candId === c.id)) return toast('Você já se candidatou a esta vaga.', true);
+    const answers = {}; job.screening.forEach(q => { answers[q.id] = String(fd.get('q_' + q.id) || '').trim(); });
+    const a = { id: uid('ap'), jobId: job.id, candId: c.id, date: nowISO(), stage: 'novo', answers, salary: +fd.get('salary') || c.salary, avail: String(fd.get('avail') || c.avail), note: String(fd.get('note') || '').trim(), history: [{ stage: 'novo', date: nowISO(), by: c.name }], forwarded: false, clientDecision: null, clientFeedback: [], interview: null, hiredDate: null };
+    db.apps.push(a); db.invites.filter(i => i.candId === c.id && i.jobId === job.id).forEach(i => { i.status = 'aceito'; });
+    notify(u.id, CAND_MSG.novo.replace('{job}', job.title), '/c/candidaturas');
+    notify(job.recruiterId, `Novo candidato para a vaga ${job.title}: ${c.name}.`, '/s/vaga/' + job.id);
+    save(); ui.doneJob = job.id; render();
+  },
+  job(f, e) {
+    if (!validate(f)) return;
+    const publish = !e.submitter || e.submitter.value === 'publish', fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), lines = k => g(k).split('\n').map(x => x.trim()).filter(Boolean);
+    const old = f.dataset.id ? by('jobs', f.dataset.id) : null, modeSel = $('select[name=mode]', f);
+    const screening = rowsOf(f, 'sq').filter(r => r.q).map(r => ({ id: ((old ? old.screening : []).find(o => o.q === r.q) || {}).id || uid('q'), q: r.q, type: r.type, expected: r.type === 'yn' ? r.expected : '', ko: !!r.ko && r.type === 'yn' }));
+    const j = old || { id: uid('j'), pubDate: null, status: 'draft' };
+    Object.assign(j, {
+      companyId: g('companyId'), title: g('title'), area: g('area'), recruiterId: g('recruiterId'), city: g('city'), state: g('state'), mode: modeSel.value, contract: g('contract'),
+      salMin: +g('salMin') || 0, salMax: +g('salMax') || 0, qty: +g('qty') || 1, deadline: g('deadline'), desc: g('desc'), resp: lines('resp'), benefits: lines('benefits'),
+      reqMand: lines('reqMand'), reqDesir: lines('reqDesir'), minExp: +g('minExp') || 0, degree: !!fd.get('degree'),
+      lang: g('langName') ? { name: g('langName'), level: g('langLevel') } : null, skills: chipsOf(f, 'jskills'), screening
+    });
+    if (publish && j.status !== 'open') { j.status = 'open'; if (!j.pubDate) j.pubDate = nowISO(); }
+    if (!old) db.jobs.push(j);
+    const rq = f.dataset.req && by('requests', f.dataset.req);
+    if (rq && rq.status === 'nova') { rq.status = 'atendida'; clientsOf(rq.companyId).forEach(cu => notify(cu.id, `Sua solicitação "${rq.title}" virou uma vaga${j.status === 'open' ? ' publicada' : ''}.`, '/e/vaga/' + j.id)); }
+    audit(old ? 'Vaga editada' : 'Vaga criada', j.title); save();
+    toast(j.status === 'open' ? (old ? 'Vaga atualizada.' : 'Vaga publicada!') : 'Rascunho salvo.'); go('/s/vaga/' + j.id);
+  },
+  schedule(f) {
+    if (!validate(f)) return;
+    const a = by('apps', f.dataset.app), job = by('jobs', a.jobId), c = by('cands', a.candId), fd = new FormData(f), when = new Date(fd.get('when')).toISOString(), type = fd.get('type');
+    const ev = Calendar.schedule(a, when, type); a.interview = { date: when, type, link: ev.link, eventId: ev.id };
+    const cu = candUser(c), txt = `Entrevista agendada para ${fdt(when)} (${type}) — ${job.title}.${ev.link ? ' Link: ' + ev.link : ''}`;
+    if (cu) notify(cu.id, txt, '/c/candidaturas'); if (c.phone) WhatsApp.send(c.phone, txt);
+    if (a.stage === 'entrevista_cliente') clientsOf(job.companyId).forEach(x => notify(x.id, `Entrevista com ${c.name} agendada para ${fdt(when)}.`, '/e/vaga/' + job.id));
+    audit('Entrevista agendada', c.name); save(); closeModal(); render(true); toast('Entrevista agendada e candidato avisado.');
+  },
+  eval(f) {
+    if (!validate(f)) return;
+    const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), c = by('cands', f.dataset.cid), a = by('apps', g('appId')), tags = fd.getAll('tags');
+    db.evals.unshift({ id: uid('ev'), candId: c.id, appId: a.id, jobId: a.jobId, by: curUser().name, date: nowISO(), pos: g('pos'), attn: g('attn') || '—', notes: g('notes') || '—', tech: +g('tech'), behav: +g('behav'), salary: +g('salary') || c.salary, avail: g('avail'), tags });
+    c.tags = uniq([...(c.tags || []), ...tags]); audit('Avaliação registrada', c.name); save(); closeModal(); render(true); toast('Avaliação registrada.');
+  },
+  invite(f) {
+    const fd = new FormData(f), c = by('cands', f.dataset.cid), job = by('jobs', String(fd.get('jobId'))), msg = String(fd.get('msg') || '').trim();
+    if (!job) return toast('Escolha uma vaga.', true);
+    if (db.invites.some(i => i.candId === c.id && i.jobId === job.id && i.status === 'pendente')) return toast('Este candidato já foi convidado para a vaga.', true);
+    db.invites.push({ id: uid('iv'), candId: c.id, jobId: job.id, date: nowISO(), status: 'pendente', msg, by: curUser().id });
+    const cu = candUser(c), text = `Você foi convidado(a) para a vaga ${job.title} (${compName(job.companyId)}).`;
+    if (cu) { if (c.consent.marketing) { notify(cu.id, text, '/c/candidaturas'); if (c.phone) WhatsApp.send(c.phone, text + ' ' + msg); } else db.notifs.unshift({ id: uid('n'), userId: cu.id, text, link: '/c/candidaturas', date: nowISO(), read: false }); }
+    audit('Convite enviado', `${c.name} → ${job.title}`); save(); closeModal(); ui.tb.job = job.id; render(true); toast(c.consent.marketing ? 'Convite enviado por e-mail e WhatsApp (simulado).' : 'Convite registrado na conta do candidato.');
+  },
+  message(f) {
+    if (!validate(f)) return;
+    const fd = new FormData(f), c = by('cands', f.dataset.cid), ch = f.dataset.ch;
+    if (ch === 'email') Mailer.send(c.email, String(fd.get('subject')), String(fd.get('body'))); else WhatsApp.send(c.phone, String(fd.get('body')));
+    audit('Contato por ' + (ch === 'email' ? 'e-mail' : 'WhatsApp'), c.name); save(); closeModal(); toast('Mensagem registrada em Comunicações (envio simulado).');
+  },
+  company(f) {
+    if (!validate(f)) return;
+    const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), email = g('email').toLowerCase();
+    if (db.users.some(x => x.email.toLowerCase() === email)) return toast('Este e-mail já está em uso.', true);
+    const co = { id: uid('co'), name: g('name'), sector: g('sector'), city: g('city'), state: g('state'), contact: g('contact'), email };
+    db.companies.push(co); db.users.push({ id: 'u_' + co.id, role: 'client', name: co.contact, email, pass: 'demo123', companyId: co.id, active: true });
+    Mailer.send(email, 'Seu acesso ao Vínculo', `Olá, ${co.contact}. Seu acesso foi criado. Senha inicial: demo123`); audit('Empresa criada', co.name); save(); render(true);
+    openModal('Empresa criada', `<div class="note mb">${ico('check', 14)} <b>${esc(co.name)}</b> foi cadastrada e o acesso da empresa cliente já existe.</div><div class="card" style="background:var(--card2)"><div class="xs mut">Login da empresa</div><div class="mono b">${esc(email)}</div><div class="xs mut mt-s">Senha inicial</div><div class="mono b">demo123</div></div><p class="sm mut mt">Para testar a visão da empresa, saia e entre com essas credenciais. Um e-mail com o acesso foi registrado em Comunicações.</p><div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Fechar</button><a class="btn pri" href="#/s/vaga/nova?co=${co.id}" data-act="closeModal">Criar vaga para esta empresa</a></div>`);
+  },
+  user(f) {
+    if (!validate(f)) return;
+    const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), email = g('email').toLowerCase();
+    if (db.users.some(x => x.email.toLowerCase() === email)) return toast('Este e-mail já está em uso.', true);
+    db.users.push({ id: uid('u_'), role: g('role'), name: g('name'), email, pass: g('pass'), active: true }); audit('Usuário criado', email); save(); closeModal(); render(true); toast('Usuário criado.');
+  },
+  request(f) {
+    if (!validate(f)) return;
+    const u = curUser(), fd = new FormData(f), g = k => String(fd.get(k) || '').trim();
+    db.requests.unshift({ id: uid('rq'), companyId: u.companyId, title: g('title'), area: g('area'), qty: +g('qty') || 1, city: g('city'), mode: g('mode'), salary: g('salary'), notes: g('notes'), date: nowISO(), status: 'nova' });
+    db.users.filter(x => isStaff(x)).forEach(x => notify(x.id, `Nova solicitação de vaga de ${compName(u.companyId)}: ${g('title')}.`, '/s/solicitacoes'));
+    save(); toast('Solicitação enviada ao recrutador.'); go('/e/painel');
+  },
+  addTag(f) {
+    const c = by('cands', f.dataset.cid), t = String(new FormData(f).get('t') || '').trim(); if (!t) return;
+    c.tags = c.tags || []; if (!c.tags.includes(t)) c.tags.push(t); save(); render(true);
+  },
+  hsearch(f) { ui.jobs = { q: String(new FormData(f).get('q') || '').trim() }; go('/vagas'); },
+  gsearch(f) { ui.tb = { limit: 18, q: String(new FormData(f).get('q') || '').trim() }; go('/s/banco'); },
+  aiParse(f) {
+    const file = $('input[name=cv]', f).files[0]; if (!file) return toast('Escolha um arquivo.', true);
+    ui.aiResult = { file: file.name, ...AI.parseResume(file.name) }; render(true);
+  }
+};
+
+/* ---------- Eventos globais ---------- */
+const timers = {}; const later = (k, fn, ms = 140) => { clearTimeout(timers[k]); timers[k] = setTimeout(fn, ms); };
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act]');
+  if (!t) { if (e.target.classList && e.target.classList.contains('ov')) closeModal(); return; }
+  if (t.tagName === 'SELECT' || (t.tagName === 'INPUT')) return;
+  const fn = actions[t.dataset.act]; if (!fn) return;
+  if (t.tagName === 'A' && t.getAttribute('href') === '#') e.preventDefault();
+  try { fn(t, e); } catch (err) { console.error(err); toast('Algo deu errado. Tente novamente.', true); }
+});
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.act && (t.tagName === 'SELECT' || t.tagName === 'INPUT')) { const fn = actions[t.dataset.act]; if (fn) fn(t.tagName === 'INPUT' ? t : t, e); return; }
+  if (t.dataset && t.dataset.live === 'resume' && t.files && t.files[0]) toast('Arquivo selecionado: ' + t.files[0].name);
+});
+function onLive(e) {
+  const t = e.target, k = t.dataset && t.dataset.live; if (!k || k === 'resume') return;
+  const val = t.type === 'checkbox' ? t.checked : t.value;
+  if (k === 'jobs') { ui.jobs[t.name] = val; later('jobs', () => refresh('#jobs-res', jobsResults)); }
+  else if (k === 'tb') { ui.tb[t.name] = val; ui.tb.limit = 18; later('tb', () => refresh('#tb-res', tbResults)); }
+  else if (k === 'tri') { ui.tri[t.name] = val; later('tri', () => refresh('#tri-res', triRows)); }
+  else if (k === 'note') { const c = by('cands', t.dataset.cid); if (c) { c.notes = val; later('note', save, 400); } }
+  else if (k === 'boardq') { ui.boardq = val; later('bq', () => { const j = by('jobs', parse().parts[2]); if (j) refresh('#board', () => boardHtml(j)); }); }
+}
+document.addEventListener('input', onLive);
+document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.live && e.target.tagName === 'SELECT') onLive(e); });
+document.addEventListener('submit', e => {
+  const f = e.target, h = f.dataset && forms[f.dataset.form]; if (!h) return;
+  e.preventDefault();
+  try { h(f, e); } catch (err) { console.error(err); toast('Algo deu errado. Tente novamente.', true); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#modal-root .ov')) { closeModal(); return; }
+  const t = e.target;
+  if (t.matches && t.matches('[data-chipinput]') && (e.key === 'Enter' || e.key === ',')) { e.preventDefault(); addChip(t); }
+  if (t.matches && t.matches('[data-chipinput]') && e.key === 'Backspace' && !t.value) { const last = $$('.chip', t.closest('[data-chips]')).pop(); if (last) last.remove(); }
+});
+document.addEventListener('focusout', e => { if (e.target.matches && e.target.matches('[data-chipinput]')) addChip(e.target); });
+
+// Arrastar e soltar no Kanban
+let dragId = null;
+document.addEventListener('dragstart', e => { const k = e.target.closest && e.target.closest('.kcard'); if (!k) return; dragId = k.dataset.app; k.classList.add('drag'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', dragId); } catch (_) { } });
+document.addEventListener('dragend', () => { dragId = null; $$('.kcard.drag').forEach(k => k.classList.remove('drag')); $$('.kcol.over').forEach(k => k.classList.remove('over')); });
+document.addEventListener('dragover', e => { const col = e.target.closest && e.target.closest('.kcol'); if (col && dragId) { e.preventDefault(); col.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const col = e.target.closest && e.target.closest('.kcol'); if (col && !col.contains(e.relatedTarget)) col.classList.remove('over'); });
+document.addEventListener('drop', e => {
+  const col = e.target.closest && e.target.closest('.kcol'); if (!col || !dragId) return;
+  e.preventDefault(); col.classList.remove('over'); const id = dragId; dragId = null; requestMove(id, col.dataset.stage);
+});
+
+
+/* tema claro/escuro */
+const syncTheme = () => {
+  const d = Theme.eff() === 'dark', l = d ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+  $$('.themebtn').forEach(b => { b.innerHTML = ico(d ? 'sun' : 'moon', 18); b.setAttribute('aria-label', l); b.title = l; });
+  $$('.seg [data-v]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === Theme.get())));
+};
+actions.theme = t => { Theme.set(t.dataset.v); syncTheme(); toast({ light: 'Tema claro ativado.', dark: 'Tema escuro ativado.', auto: 'Tema automático: segue a configuração do seu aparelho.' }[t.dataset.v]); };
+actions.themeToggle = () => { const n = Theme.eff() === 'dark' ? 'light' : 'dark'; Theme.set(n); syncTheme(); toast(n === 'dark' ? 'Tema escuro ativado.' : 'Tema claro ativado.'); };
+try { if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme); } catch (e) { }
+
+/* ---------- 8. Inicialização ---------- */
+db = Persist.load();
+if (!db || !db.users || !db.jobs) { db = seedDB(); }
+['invites', 'requests', 'delReqs', 'audit', 'outbox', 'evals', 'notifs'].forEach(k => { if (!db[k]) db[k] = []; });
+save();
+window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
+render();
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse };
+})();
