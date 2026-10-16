@@ -1,0 +1,26 @@
+VÍNCULO — PASTA PARA O GITHUB PAGES
+===================================
+
+O QUE TEM AQUI
+  index.html      página inicial (carrega o sistema)
+  vinculo/        app.js, app.css e as fotos (img/)
+  favicon.png     ícone do site
+  .nojekyll       evita que o GitHub processe os arquivos
+
+COMO PUBLICAR
+  1. Crie um repositório no GitHub. Use o nome  seu-usuario.github.io
+     para o endereço ficar curto (ou outro nome qualquer).
+  2. Envie TODO o conteúdo desta pasta para a raiz do repositório
+     (inclusive o arquivo oculto .nojekyll).
+  3. No repositório: Settings > Pages > Source: "Deploy from a branch",
+     branch main, pasta "/ (root)" > Save.
+  4. Aguarde 1 a 3 minutos e abra o endereço mostrado em Pages.
+
+OBSERVAÇÕES
+  - Os caminhos já estão relativos: funciona em qualquer nome de repositório.
+  - O site é público para quem tiver o link, com dados de demonstração.
+  - Os dados ficam só no navegador de cada visitante (sem servidor).
+  - Esta cópia é separada do projeto do Lovable: ao alterar app.js ou app.css
+    no projeto, copie os arquivos novos para cá e envie de novo ao GitHub.
+  - Se o site usar uma foto nova em app.js, mantenha o caminho SEM a barra
+    inicial:  "vinculo/img/foto.jpg"  (e não "/vinculo/img/foto.jpg").
