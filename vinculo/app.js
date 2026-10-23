@@ -56,6 +56,9 @@ const IC = {
   edit: '<path d="M4 20l1-4L16 5l3 3L8 19z"/>',
   dots: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   inbox: '<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+  trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+  tag: '<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.4"/>',
+  kanban: '<rect x="3" y="4" width="5" height="16" rx="1.2"/><rect x="9.5" y="4" width="5" height="10" rx="1.2"/><rect x="16" y="4" width="5" height="13" rx="1.2"/>',
   chart: '<path d="M4 20V4M4 20h16M8 16v-5M13 16V8M18 16v-8"/>',
   link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
   star: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 17l-5.2 2.7 1-5.9L3.5 9.7l5.9-.8z"/>',
@@ -84,6 +87,11 @@ const STAGES = [
   { id: 'desistiu', name: 'Desistiu', short: 'Desistiu', c: '#7B8794' }
 ];
 const ST = Object.fromEntries(STAGES.map(s => [s.id, s]));
+const REASONS = {
+  reprovado: ['Perfil técnico incompatível', 'Pretensão salarial acima da faixa', 'Perfil comportamental', 'Reprovado pelo cliente', 'Requisito obrigatório não atendido', 'Outro motivo'],
+  desistiu: ['Salário abaixo da pretensão', 'Sem retorno / não compareceu', 'Modelo de trabalho (presencial/híbrido)', 'Aceitou outra proposta', 'Motivos pessoais ou familiares', 'Distância / localização', 'Outro motivo']
+};
+
 const SIDE = ['reprovado', 'desistiu'];
 const CLOSED = ['reprovado', 'desistiu', 'contratado'];
 const NEXT = { novo: 'triagem', triagem: 'entrevista_rh', entrevista_rh: 'entrevista_cliente', entrevista_cliente: 'aprovado', aprovado: 'contratado' };
@@ -223,16 +231,16 @@ function seedDB() {
   const R = rng(11);
   const pick = a => a[Math.floor(R() * a.length)], int = (a, b) => a + Math.floor(R() * (b - a + 1)), chance = p => R() < p;
   const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; };
-  const d = { users: [], companies: [], jobs: [], cands: [], apps: [], evals: [], notifs: [], outbox: [], invites: [], requests: [], delReqs: [], audit: [], ver: 1 };
+  const d = { users: [], companies: [], jobs: [], cands: [], apps: [], evals: [], notifs: [], outbox: [], invites: [], requests: [], delReqs: [], audit: [], ver: 1, cargos: defaultCargos() };
   const ym = dt => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
   const slug = s => strip(s).replace(/[^a-z0-9]+/g, '');
 
   d.companies = [
-    { id: 'co1', name: 'Grupo Maré Alimentos', sector: 'Indústria de alimentos', city: 'Jaboatão dos Guararapes', state: 'PE', contact: 'Sônia Maré', email: 'empresa@grupomare.demo' },
-    { id: 'co2', name: 'Atlântico Distribuidora', sector: 'Distribuição e logística', city: 'Recife', state: 'PE', contact: 'Paulo Atlântico', email: 'rh@atlantico.demo' },
-    { id: 'co3', name: 'NordesteTech Soluções', sector: 'Tecnologia', city: 'Recife', state: 'PE', contact: 'Ana Beltrão', email: 'talentos@nordestetech.demo' },
-    { id: 'co4', name: 'Casa Vértice Engenharia', sector: 'Construção civil', city: 'Salvador', state: 'BA', contact: 'Marcos Vértice', email: 'rh@casavertice.demo' },
-    { id: 'co5', name: 'Clínica Bem Viver', sector: 'Saúde', city: 'Fortaleza', state: 'CE', contact: 'Lívia Torres', email: 'gestao@bemviver.demo' }
+    { id: 'co1', name: 'Grupo Maré Alimentos', cnpj: '11222333000181', phone: '8133334444', sector: 'Indústria de alimentos', city: 'Jaboatão dos Guararapes', state: 'PE', contact: 'Sônia Maré', email: 'empresa@grupomare.demo' },
+    { id: 'co2', name: 'Atlântico Distribuidora', cnpj: '45012036000123', phone: '8134445555', sector: 'Distribuição e logística', city: 'Recife', state: 'PE', contact: 'Paulo Atlântico', email: 'rh@atlantico.demo' },
+    { id: 'co3', name: 'NordesteTech Soluções', cnpj: '78345678000101', phone: '8135556666', sector: 'Tecnologia', city: 'Recife', state: 'PE', contact: 'Ana Beltrão', email: 'talentos@nordestetech.demo' },
+    { id: 'co4', name: 'Casa Vértice Engenharia', cnpj: '90567123000100', phone: '7132227777', sector: 'Construção civil', city: 'Salvador', state: 'BA', contact: 'Marcos Vértice', email: 'rh@casavertice.demo' },
+    { id: 'co5', name: 'Clínica Bem Viver', cnpj: '12654987000147', phone: '8532228888', sector: 'Saúde', city: 'Fortaleza', state: 'CE', contact: 'Lívia Torres', email: 'gestao@bemviver.demo' }
   ];
   d.users.push(
     { id: 'u_admin', role: 'admin', name: 'Helena Prado', email: 'admin@vinculo.demo', pass: 'demo123', active: true },
@@ -347,6 +355,7 @@ function seedDB() {
     const a = { id: uid('ap'), jobId: job.id, candId: c.id, date: date.toISOString(), stage, answers: answersFor(job, c, ok), salary: c.salary, avail: c.avail, note: '', history, forwarded: path.includes('entrevista_cliente'), clientDecision: null, clientFeedback: [], interview: null, hiredDate: null };
     if (['aprovado', 'contratado'].includes(stage)) a.clientDecision = 'advance';
     if (stage === 'contratado') a.hiredDate = history[history.length - 1].date;
+    if (stage === 'reprovado' || stage === 'desistiu') { const hi = (c.salary || 0) > (job.salMax || 1e9); a.reason = pick(stage === 'desistiu' ? (hi ? ['Salário abaixo da pretensão', 'Salário abaixo da pretensão', 'Sem retorno / não compareceu'] : ['Sem retorno / não compareceu', 'Aceitou outra proposta', 'Motivos pessoais ou familiares', 'Modelo de trabalho (presencial/híbrido)']) : (hi ? ['Pretensão salarial acima da faixa'] : ['Perfil técnico incompatível', 'Reprovado pelo cliente', 'Perfil comportamental'])); }
     if (stage === 'entrevista_rh') a.interview = { date: dAhead(int(1, 6), int(9, 16)), type: pick(['Online', 'Presencial']) };
     if (stage === 'entrevista_cliente') a.interview = { date: dAhead(int(2, 8), int(9, 16)), type: pick(['Online', 'Presencial']) };
     d.apps.push(a); return a;
@@ -455,12 +464,14 @@ function pub(content) {
 function shell(content) {
   const u = curUser(), n = unreadOf(u), h = location.hash.replace('#', ''); document.body.classList.remove('hasbar');
   const nl = (href, ic, label, badge) => `<a class="nl ${h === href || (href.length > 4 && h.startsWith(href + '/')) ? 'on' : ''}" href="#${href}" data-act="closeSide">${ico(ic)}<span class="grow">${label}</span>${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
+  const inInd = h.startsWith('/s/indicadores'), indOpen = ui.indOpen === false ? false : (ui.indOpen || inInd);
+  const indMenu = isStaff(u) ? `<button type="button" class="nl nlp ${inInd ? 'on' : ''}" data-act="indToggle" aria-expanded="${indOpen}">${ico('trend')}<span class="grow">Indicadores</span><span class="chev ${indOpen ? 'open' : ''}">${ico('right', 14)}</span></button>` + (indOpen ? `<div class="nlsub">${IND_SUBS.map(x => { const href = '/s/indicadores/' + x[0]; return `<a class="nl sub ${h === href || (x[0] === 'geral' && h === '/s/indicadores') ? 'on' : ''}" href="#${href}" data-act="closeSide">${x[0] === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : x[1]}</a>`; }).join('')}</div>` : '') : '';
   let links;
   if (u.role === 'client') links = nl('/e/painel', 'home', 'Meu painel') + nl('/e/solicitar', 'plus', 'Solicitar vaga') + nl('/e/notificacoes', 'bell', 'Notificações', n);
   else {
     const reqs = db.requests.filter(r => r.status === 'nova').length;
-    links = nl('/s/dashboard', 'chart', 'Painel') + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs) + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
-    if (u.role === 'admin') links += `<div class="grp">Administração</div>` + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
+    links = nl('/s/dashboard', 'chart', 'Tela Principal') + indMenu + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/kanban', 'kanban', 'Kanban') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs) + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
+    if (u.role === 'admin') links += `<div class="grp">Administração</div>` + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/cargos', 'tag', 'Cargos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
   }
   const search = isStaff(u) ? `<form class="srch" data-form="gsearch" role="search">${ico('search', 18)}<input name="q" placeholder="Buscar talento por nome, cargo ou competência" aria-label="Buscar talento"></form>` : '<div class="grow"></div>';
   return `<div class="app ${ui.side ? 'open' : ''}"><aside class="side" aria-label="Menu"><a class="logo" href="#${homeOf(u)}">${LOGO}vínculo</a>${links}<div class="themerow"><span class="xs mut b">Aparência</span>${themeSeg()}</div><div class="me">${avatar(u.name, 36)}<div class="grow"><div class="b sm">${esc(u.name)}</div><div class="xs mut">${ROLE_NAME[u.role]}${u.companyId ? ' — ' + esc(compName(u.companyId)) : ''}</div></div><button class="iconbtn" data-act="logout" aria-label="Sair">${ico('out')}</button></div></aside><div class="scrim" data-act="closeSide"></div>
@@ -496,19 +507,62 @@ function jobsPublic() {
   <details class="fx mb" ${Object.keys(f).some(k => k !== 'q' && f[k]) ? 'open' : ''}><summary>Filtros</summary><div class="filters">${L('title', 'Cargo', uniq(open.map(j => j.title)).sort())}${L('area', 'Área', uniq(open.map(j => j.area)).sort())}${L('city', 'Cidade', uniq(open.map(j => j.city)).sort())}${L('state', 'Estado', uniq(open.map(j => j.state)).sort())}${L('mode', 'Modalidade', MODES)}${L('sal', 'Faixa salarial', SAL_OPTS)}${L('contract', 'Tipo de contratação', CONTRACTS)}</div></details>
   <div id="jobs-res">${jobsResults()}</div></main>`);
 }
+/* ---------- Link público da vaga e divulgação ---------- */
+const jobUrl = id => location.href.split('#')[0] + '#/vaga/' + id;
+const jobShareText = j => `Vaga aberta: ${j.title}\n${compName(j.companyId)} · ${j.city}/${j.state} · ${j.mode} · ${j.contract}${(j.salMin || j.salMax) ? '\nSalário: ' + salRange(j) : ''}\n\nVeja os detalhes e candidate-se pelo link:`;
+const shareNets = (j, url, txt) => { const e = encodeURIComponent, full = txt + '\n' + url; return [['LinkedIn', 'https://www.linkedin.com/sharing/share-offsite/?url=' + e(url)], ['WhatsApp', 'https://wa.me/?text=' + e(full)], ['Facebook', 'https://www.facebook.com/sharer/sharer.php?u=' + e(url)], ['X', 'https://twitter.com/intent/tweet?text=' + e(txt) + '&url=' + e(url)], ['E-mail', 'mailto:?subject=' + e('Vaga: ' + j.title) + '&body=' + e(full)]]; };
+async function copyText(s) {
+  try { await navigator.clipboard.writeText(s); return true; }
+  catch (e) { const el = document.createElement('textarea'); el.value = s; el.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(el); el.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (_) { } el.remove(); return ok; }
+}
+function shareModal(j, fresh) {
+  const url = jobUrl(j.id), txt = jobShareText(j), full = txt + '\n' + url, open = j.status === 'open';
+  openModal(fresh ? 'Vaga publicada' : 'Divulgar vaga', `${fresh ? `<div class="sh-ok">${ico('check', 18)}<span><b>${esc(j.title)}</b> já está no ar. Copie o link abaixo e publique nas suas redes.</span></div>` : `<p class="sm mut mb"><b>${esc(j.title)}</b> · ${esc(compName(j.companyId))}</p>`}
+  ${open ? '' : `<div class="note mb">Esta vaga não está aberta. Quem acessar o link verá a vaga, mas sem a opção de candidatura.</div>`}
+  <label class="field"><span>Link da vaga</span><div class="sh-link"><input id="sh-url" readonly value="${esc(url)}" aria-label="Link da vaga"><button type="button" class="btn pri" data-act="copyFrom" data-src="#sh-url" data-msg="Link copiado.">${ico('link', 15)} Copiar link</button></div></label>
+  <a class="btn block mt-s" href="${esc(url)}" target="_blank" rel="noopener">Abrir página da vaga em nova guia ${ico('right', 14)}</a>
+  <div class="sh-sep"><span>Compartilhar direto</span></div>
+  <div class="sh-nets">${shareNets(j, url, txt).map(n => `<a class="btn sm" href="${esc(n[1])}" target="_blank" rel="noopener">${n[0]}</a>`).join('')}</div>
+  <label class="field mt"><span>Texto sugerido para a publicação <small>(pode editar antes de copiar)</small></span><textarea id="sh-txt" rows="6">${esc(full)}</textarea></label>
+  <div class="flex gap wrap mt-s"><button type="button" class="btn" data-act="copyFrom" data-src="#sh-txt" data-msg="Texto copiado.">Copiar texto com link</button></div>
+  <p class="xs mut mt">Instagram não aceita link clicável em publicações: coloque o link na bio ou use o adesivo de link nos stories.</p>
+  <div class="note mt">Demonstração: os dados ficam neste navegador. Em outro aparelho o link só mostrará a vaga quando o sistema estiver com banco de dados online.</div>
+  <div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Concluir</button></div>`);
+  const i = $('#sh-url'); if (i) i.select();
+}
 function jobDetail(id) {
-  const j = by('jobs', id); if (!j) return notFound(); const u = curUser();
-  const applied = u && u.candId && db.apps.find(a => a.jobId === j.id && a.candId === u.candId);
-  const closed = j.status !== 'open';
-  const cta = applied ? `<a class="btn block" href="#/c/candidaturas">Você já se candidatou. Acompanhar</a>` : closed ? `<button class="btn block" disabled>Vaga ${j.status === 'paused' ? 'pausada' : 'encerrada'}</button>` : `<a class="btn pri block" href="#/candidatar/${j.id}">Candidatar-se</a>`;
-  return pub(`<main class="wrapc"><p class="sm mb"><a href="#/vagas">${'←'} Todas as vagas</a></p><div class="cols two"><div class="stack">
-  <div class="card"><h1 style="font-size:clamp(26px,4vw,36px)">${esc(j.title)}</h1><p class="mut mt-s">${esc(compName(j.companyId))}</p><div class="flex wrap gap mt"><span class="badge" style="--c:var(--pri)">${j.mode}</span><span class="badge">${j.contract}</span><span class="badge">${ico('pin', 12)} ${esc(j.city)}/${j.state}</span><span class="badge">${esc(j.area)}</span></div></div>
-  <div class="card"><h3>Sobre a vaga</h3><p>${esc(j.desc)}</p></div>
-  <div class="card"><h3>Responsabilidades</h3>${ul(j.resp)}</div>
-  <div class="g2"><div class="card"><h3>Requisitos obrigatórios</h3>${ul(j.reqMand)}</div><div class="card"><h3>Requisitos desejáveis</h3>${ul(j.reqDesir)}</div></div>
-  <div class="card"><h3>Benefícios</h3>${chipsView(j.benefits)}</div></div>
-  <aside class="stack"><div class="card"><div class="sal" style="font-size:22px">${salRange(j)}</div><p class="mut sm">${j.contract}${j.qty > 1 ? ` — ${j.qty} posições` : ''}</p><div class="mt">${cta}</div><hr style="border:0;border-top:1px solid var(--line);margin:16px 0"><p class="sm"><b>Publicada em</b> ${fdate(j.pubDate)}</p><p class="sm mt-s"><b>Candidaturas até</b> ${j.deadline ? fdate(j.deadline) : 'sem prazo definido'}</p></div>
-  <div class="note">${ico('shield', 14)} Seus dados são usados apenas para processos seletivos. <a href="#/privacidade">Saiba mais</a></div></aside></div></main>`);
+  const j = by('jobs', id), u = curUser(), staff = isStaff(u);
+  if (!j || (j.status === 'draft' && !staff)) return notFound();
+  const co = compName(j.companyId), open = j.status === 'open', applied = u && u.candId && db.apps.find(a => a.jobId === j.id && a.candId === u.candId);
+  const url = jobUrl(j.id), txt = jobShareText(j), nets = shareNets(j, url, txt), stLbl = j.status === 'paused' ? 'pausada' : j.status === 'closed' ? 'encerrada' : 'em rascunho';
+  ui.pageTitle = `${j.title} · ${co} | Vínculo`;
+  const cta = staff ? `<button class="btn block" disabled>Candidatura disponível para candidatos</button>` : applied ? `<a class="btn block" href="#/c/candidaturas">Você já se candidatou. Acompanhar</a>` : !open ? `<button class="btn block" disabled>Vaga ${stLbl}</button>` : `<a class="btn pri lg block" href="#/candidatar/${j.id}">Candidatar-se</a>`;
+  const hint = !staff && !applied && open && !u ? `<p class="jp-hint">Primeira vez aqui? <a href="#/cadastro?next=${encodeURIComponent('/candidatar/' + j.id)}">Crie seu perfil</a> em cerca de 5 minutos e candidate-se.</p>` : '';
+  const fact = (ic, l, v) => `<div class="jp-fact"><span class="jp-fi">${ico(ic, 16)}</span><div><div class="xs mut">${l}</div><div class="b">${v}</div></div></div>`;
+  const sec = (t, body) => `<section class="jp-sec"><h2>${t}</h2>${body}</section>`;
+  const list = a => a && a.length ? `<ul class="jp-list">${a.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+  const reqs = (j.reqMand && j.reqMand.length) || (j.reqDesir && j.reqDesir.length);
+  return pub(`${staff ? `<div class="jp-prev">${ico('shield', 14)} Visualização da equipe: é assim que os candidatos veem esta vaga. <a href="#/s/vaga/${j.id}">Voltar ao Kanban</a>${open ? ` <button type="button" class="btn sm" data-act="shareJob" data-id="${j.id}">Divulgar</button>` : ''}</div>` : ''}
+  <section class="jp-hero"><div class="wrapc jp-in"><a class="jp-back" href="#/vagas">← Todas as vagas</a>
+    <span class="eyebrow">${esc(j.area)}</span><h1>${esc(j.title)}</h1>
+    <div class="jp-co">${avatar(co, 36)}<span>${esc(co)}</span></div>
+    <div class="jp-meta"><span>${ico('pin', 15)} ${esc(j.city)}/${j.state}</span><span>${ico('brief', 15)} ${j.mode}</span><span>${ico('file', 15)} ${j.contract}</span>${j.pubDate ? `<span>${ico('cal', 15)} Publicada ${ago(j.pubDate)}</span>` : ''}</div>
+    ${open ? '' : `<div class="jp-closed">Esta vaga está ${stLbl} e não recebe candidaturas no momento. <a href="#/vagas">Ver outras vagas</a></div>`}
+  </div></section>
+  <main class="wrapc jp-wrap"><div class="jp-grid"><article class="jp-main">
+    ${sec('Sobre a vaga', `<p class="jp-desc">${esc(j.desc)}</p>`)}
+    ${j.resp && j.resp.length ? sec('Responsabilidades', list(j.resp)) : ''}
+    ${reqs ? sec('Requisitos', `<div class="jp-two">${j.reqMand && j.reqMand.length ? `<div><h3>Obrigatórios</h3>${list(j.reqMand)}</div>` : ''}${j.reqDesir && j.reqDesir.length ? `<div><h3>Desejáveis</h3>${list(j.reqDesir)}</div>` : ''}</div>`) : ''}
+    ${j.benefits && j.benefits.length ? sec('Benefícios', `<div class="jp-ben">${j.benefits.map(b => `<span>${ico('check', 15)}${esc(b)}</span>`).join('')}</div>`) : ''}
+    ${sec('Como é o processo', `<ol class="jp-steps">${TL.slice(0, 4).map((t, i) => `<li><i>${i + 1}</i><span>${t}</span></li>`).join('')}<li><i>${ico('check', 13)}</i><span>Resultado</span></li></ol><p class="sm mut mt-s">Você acompanha cada etapa pela área do candidato e recebe aviso a cada mudança.</p>`)}
+  </article>
+  <aside class="jp-side"><div class="jp-card">
+    <div class="xs mut">Faixa salarial</div><div class="jp-sal">${salRange(j)}</div>
+    <div class="jp-facts">${fact('file', 'Contratação', esc(j.contract))}${fact('brief', 'Modalidade', esc(j.mode))}${fact('pin', 'Local', `${esc(j.city)}/${j.state}`)}${j.qty > 1 ? fact('users', 'Posições', j.qty) : ''}${fact('cal', 'Candidaturas até', j.deadline ? fdate(j.deadline) : 'sem prazo definido')}</div>
+    <div class="jp-cta">${cta}${hint}</div>
+    <div class="jp-share"><div class="xs mut mb-s">Compartilhar esta vaga</div><div class="jp-sh-row"><button type="button" class="btn sm" data-act="copyFrom" data-val="${esc(url)}" data-msg="Link copiado.">${ico('link', 14)} Copiar link</button>${nets.slice(0, 2).map(n => `<a class="btn sm" href="${esc(n[1])}" target="_blank" rel="noopener">${n[0]}</a>`).join('')}</div></div>
+  </div><div class="jp-priv">${ico('shield', 14)} <span>Seus dados são usados apenas para processos seletivos. <a href="#/privacidade">Saiba mais</a></span></div></aside></div></main>
+  ${!staff && !applied && open ? `<div class="jp-bar"><div><div class="xs mut">Faixa salarial</div><b>${salRange(j)}</b></div><a class="btn pri" href="#/candidatar/${j.id}">Candidatar-se</a></div>` : ''}`);
 }
 
 /* ---------- Landing, login, cadastro, textos legais ---------- */
@@ -576,14 +630,17 @@ function googleContinue(name, email, next) {
     Sess.set(ex.id); closeModal(); toast(`Bem-vindo(a) de volta, ${ex.name.split(' ')[0]}!`);
     return go(next && next.startsWith('/') && !next.startsWith('//') ? next : homeOf(ex));
   }
-  ui.google = { name, email }; ui.step = 0; closeModal(); toast('Conta Google conectada. Complete seu perfil para finalizar.'); go('/cadastro');
+  ui.google = { name, email }; ui.step = 0; if (next && next.startsWith('/') && !next.startsWith('//')) ui.afterReg = next; closeModal(); toast('Conta Google conectada. Complete seu perfil para finalizar.'); go('/cadastro');
 }
 const googleBanner = () => `<div class="note mb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span>${G_LOGO.replace('width="20" height="20"', 'width="16" height="16" style="vertical-align:-3px"')} Conectado com Google (demonstração): <b>${esc(ui.google.email)}</b>. Falta pouco: complete seus dados.</span><a href="#" data-act="googleCancel">Usar outro e-mail</a></div>`;
 function loginView(next) {
-  return pub(`<main class="wrapc narrow"><div class="g2"><div class="card"><h2 class="mb">Entrar</h2>${googleBtn(next)}<div class="orsep"><span>ou entre com e-mail e senha</span></div><form data-form="login" class="stack"><input type="hidden" name="next" value="${esc(next || '')}">
-  ${fld('E-mail', inp('email', '', { type: 'email', req: 1, attrs: 'autocomplete="username"' }))}${fld('Senha', inp('pass', '', { type: 'password', req: 1, attrs: 'autocomplete="current-password"' }))}<button class="btn pri block">Entrar</button></form>
-  <p class="sm mut mt">Ainda não tem conta? <a href="#/cadastro">Criar perfil de candidato</a></p></div>
-  <div class="card"><h3>Contas de demonstração</h3><p class="sm mut mb">Senha de todas: <span class="mono">demo123</span>. Um clique para entrar.</p><div class="stack-s">${DEMO.map(d => `<button class="btn block" style="justify-content:flex-start;height:auto;padding:10px 14px;text-align:left;white-space:normal" data-act="demoLogin" data-email="${d[1]}"><span><b>${d[0]}</b><br><span class="mut sm" style="font-weight:400">${d[2]}</span><br><span class="mono mut">${d[1]}</span></span></button>`).join('')}</div></div></div></main>`);
+  const roleC = { Administrador: 'var(--coral)', Recrutador: 'var(--pri)', 'Empresa cliente': 'var(--blue)', Candidato: 'var(--lilac)' };
+  return pub(`<main class="auth"><div class="auth-in"><section class="auth-card"><h1>Entrar</h1><p class="auth-sub">Acesse sua conta para acompanhar vagas, candidaturas e processos.</p>${googleBtn(next)}<div class="orsep"><span>ou use e-mail e senha</span></div>
+  <form data-form="login" class="stack"><input type="hidden" name="next" value="${esc(next || '')}">
+  ${fld('E-mail', inp('email', '', { type: 'email', req: 1, ph: 'voce@email.com', attrs: 'autocomplete="username"' }))}${fld('Senha', inp('pass', '', { type: 'password', req: 1, attrs: 'autocomplete="current-password"' }))}<button class="btn pri block lg">Entrar</button></form>
+  <p class="sm mut auth-foot">Ainda não tem conta? <a href="#/cadastro${next && next.startsWith('/') ? '?next=' + encodeURIComponent(next) : ''}">Criar perfil de candidato</a></p></section>
+  <aside class="auth-demo"><span class="eyebrow">Demonstração</span><h2>Entre com uma conta de exemplo</h2><p class="sm mut">Um clique para explorar cada perfil. Senha de todas: <span class="mono">demo123</span></p>
+  <div class="demo-list">${DEMO.map(d => `<button type="button" class="demo-row" data-act="demoLogin" data-email="${d[1]}"><span class="demo-av" style="--c:${roleC[d[0]] || 'var(--pri)'}">${esc(d[0].charAt(0))}</span><span class="demo-tx"><b>${d[0]}</b><span>${d[2]}</span><span class="mono">${d[1]}</span></span><span class="demo-go">${ico('right', 16)}</span></button>`).join('')}</div></aside></div></main>`);
 }
 function registerView() {
   const u = curUser(); if (u && u.role === 'candidate') { go('/c/perfil'); return ''; }
@@ -599,7 +656,7 @@ const chipEl = v => `<span class="chip" data-v="${esc(v)}">${esc(v)}<button type
 const chipsField = (id, label, vals, hint, list) => `<div class="field"><span>${label}${hint ? ` <small>${hint}</small>` : ''}</span><div class="chips-in" data-chips="${id}">${(vals || []).map(chipEl).join('')}<input type="text" data-chipinput placeholder="Digite e pressione Enter" ${list ? `list="${list}"` : ''}></div></div>`;
 const eduRow = (e = {}) => `<div class="rep" data-group="edu">${fld('Nível', sel('level', EDU, e.level || 'Graduação'))}${fld('Curso', inp('course', e.course))}${fld('Instituição', inp('inst', e.inst))}${fld('Conclusão', inp('year', e.year, { type: 'number', attrs: 'min="1970" max="2040"' }))}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover formação">${ico('x', 16)}</button></div>`;
 const langRow = (e = {}) => `<div class="rep" data-group="lang">${fld('Idioma', sel('lang', LANGS, e.lang || 'Inglês'))}${fld('Nível', sel('level', LVL, e.level || 'Intermediário'))}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover idioma">${ico('x', 16)}</button></div>`;
-const expRow = (e = {}) => `<div class="rep" data-group="exp">${fld('Cargo', inp('role', e.role))}${fld('Empresa', inp('company', e.company))}${fld('Início', inp('from', e.from, { type: 'month' }))}${fld('Fim', inp('to', e.to, { type: 'month' }), 'vazio = atual')}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover experiência">${ico('x', 16)}</button><div class="full" style="grid-column:1/-1">${fld('O que você fazia', `<textarea name="desc" style="min-height:64px">${esc(e.desc || '')}</textarea>`)}</div></div>`;
+const expRow = (e = {}) => `<div class="rep" data-group="exp">${fld('Cargo', inp('role', e.role, { attrs: CARGO_ATTR }))}${fld('Empresa', inp('company', e.company))}${fld('Início', inp('from', e.from, { type: 'month' }))}${fld('Fim', inp('to', e.to, { type: 'month' }), 'vazio = atual')}<button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover experiência">${ico('x', 16)}</button><div class="full" style="grid-column:1/-1">${fld('O que você fazia', `<textarea name="desc" style="min-height:64px">${esc(e.desc || '')}</textarea>`)}</div></div>`;
 const ROWS = { edu: eduRow, lang: langRow, exp: expRow };
 function profileForm(c, mode) {
   const reg = mode === 'register'; c = c || { modes: [], education: [], languages: [], exps: [], courses: [], skills: [] };
@@ -608,7 +665,7 @@ function profileForm(c, mode) {
   const steps = ['Dados de acesso', 'Perfil profissional', 'Formação e idiomas', 'Experiências e currículo', 'Privacidade'];
   return `<form data-form="profile" data-mode="${mode}" novalidate-ok>${reg ? `<div class="wiz" id="wiz">${steps.map((s, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('')}</div><p class="sm mut mb" id="wiz-t">Etapa 1 de 5: ${steps[0]}</p>` : ''}
   ${S(0, reg ? 'Dados de acesso' : 'Dados pessoais', `${reg && ui.google ? googleBanner() : ''}<div class="fg">${fld('Nome completo', inp('fullName', c.name, { req: 1 }))}${fld('E-mail', inp('email', c.email, { type: 'email', req: 1, attrs: edit(mode) + (reg && ui.google ? ' readonly' : '') }))}${reg && !ui.google ? fld('Senha', inp('pass', '', { type: 'password', req: 1, attrs: 'minlength="6" autocomplete="new-password"' }), 'mín. 6 caracteres') : ''}${fld('Telefone/WhatsApp', inp('phone', c.phone, { type: 'tel', req: 1, ph: '(81) 9 9999-9999' }))}${fld('Cidade', inp('city', c.city, { req: 1 }))}${fld('Estado', sel('state', UF, c.state || 'PE'))}${fld('Data de nascimento', inp('birth', c.birth, { type: 'date', req: 1 }))}</div>`)}
-  ${S(1, 'Perfil profissional', `<div class="fg">${fld('Cargo atual ou desejado', inp('title', c.title, { req: 1 }))}${fld('Área profissional', sel('area', AREA_LIST, c.area, 'Selecione', 'required'))}${fld('Pretensão salarial (R$)', inp('salary', c.salary, { type: 'number', attrs: 'min="0" step="100"', req: 1 }))}${fld('Disponibilidade para início', sel('avail', AVAIL, c.avail || 'Imediata'))}${fld('Disponibilidade para viagens', sel('travel', ['Sim', 'Não'], c.travel || 'Não'))}${fld('LinkedIn', inp('linkedin', c.linkedin, { type: 'url', ph: 'https://linkedin.com/in/...' }))}${fld('Portfólio/site', inp('portfolio', c.portfolio, { type: 'url', ph: 'https://' }))}</div>
+  ${S(1, 'Perfil profissional', `<div class="fg">${fld('Cargo atual ou desejado', inp('title', c.title, { req: 1, attrs: CARGO_ATTR }) + cargoDL())}${fld('Área profissional', sel('area', AREA_LIST, c.area, 'Selecione', 'required'))}${fld('Pretensão salarial (R$)', inp('salary', c.salary, { type: 'number', attrs: 'min="0" step="100"', req: 1 }))}${fld('Disponibilidade para início', sel('avail', AVAIL, c.avail || 'Imediata'))}${fld('Disponibilidade para viagens', sel('travel', ['Sim', 'Não'], c.travel || 'Não'))}${fld('LinkedIn', inp('linkedin', c.linkedin, { type: 'url', ph: 'https://linkedin.com/in/...' }))}${fld('Portfólio/site', inp('portfolio', c.portfolio, { type: 'url', ph: 'https://' }))}</div>
   <div class="field"><span>Modalidade desejada</span><div class="opts">${MODES.map(m => `<label><input type="checkbox" name="modes" value="${m}" ${(c.modes || []).includes(m) ? 'checked' : ''}>${m}</label>`).join('')}</div></div>
   ${fld('Resumo profissional', `<textarea name="summary" placeholder="Conte em poucas linhas sua trajetória e o que busca.">${esc(c.summary || '')}</textarea>`)}`)}
   ${S(2, 'Formação e idiomas', `<div class="field"><span>Formação acadêmica</span><div id="g-edu">${(c.education.length ? c.education : [{}]).map(eduRow).join('')}</div><button type="button" class="btn sm" data-act="addRow" data-g="edu">${ico('plus', 14)} Adicionar formação</button></div>
@@ -727,8 +784,143 @@ function stats() {
   };
 }
 const hbars = (items, total) => { const m = Math.max(1, ...items.map(i => i.v)); return items.map(i => `<div class="hbar" style="--c:${i.c || 'var(--pri)'}"><span title="${esc(i.l)}">${esc(i.l)}</span><span class="tr"><i style="width:${Math.round(i.v / m * 100)}%"></i></span><b>${i.v}${total ? '' : ''}</b></div>`).join('') || '<p class="mut sm">Sem dados.</p>'; };
-function dashboard() {
-  const s = stats(), u = curUser(), apps = db.apps;
+/* ---------- Indicador: novas vagas (7 dias e período de até 24 meses) ---------- */
+const jobOpenDate = j => j.status === 'draft' ? null : (j.pubDate || j.createdAt || null);
+const dayStart = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const NV_OPTS = [['7d', 'Últimos 7 dias'], ['30d', 'Últimos 30 dias'], ['90d', 'Últimos 90 dias'], ['6m', 'Últimos 6 meses'], ['12m', 'Últimos 12 meses'], ['24m', 'Últimos 24 meses'], ['custom', 'Personalizado']];
+const isoDay = d => { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+const jobsIn = (a, b, list) => (list || db.jobs).filter(j => { const d = jobOpenDate(j); if (!d) return false; const t = new Date(d).getTime(); return t >= a.getTime() && t < b.getTime(); });
+function nvRange() {
+  const nv = ui.nv = ui.nv || { p: '30d' }, today = dayStart(new Date()), end = new Date(today.getTime() + 864e5);
+  const min = new Date(today); min.setMonth(min.getMonth() - 24); min.setDate(1);
+  let start;
+  if (nv.p === 'custom') {
+    const f = nv.from ? dayStart(nv.from + 'T00:00:00') : new Date(today.getTime() - 29 * 864e5), t = nv.to ? dayStart(nv.to + 'T00:00:00') : today;
+    start = f < min ? min : f; let e = new Date(Math.min(t.getTime(), today.getTime()) + 864e5); if (e <= start) e = new Date(start.getTime() + 864e5);
+    return { start, end: e, clamped: f < min };
+  }
+  if (nv.p.endsWith('m')) { start = new Date(today.getFullYear(), today.getMonth() - (parseInt(nv.p) - 1), 1); }
+  else start = new Date(today.getTime() - (parseInt(nv.p) - 1) * 864e5);
+  return { start, end };
+}
+function nvBuckets(start, end, list) {
+  const days = Math.round((end - start) / 864e5), out = [], MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  if (days <= 14) { for (let t = new Date(start); t < end; t = new Date(t.getTime() + 864e5)) out.push({ a: t, b: new Date(t.getTime() + 864e5), l: String(t.getDate()).padStart(2, '0') + '/' + String(t.getMonth() + 1).padStart(2, '0') }); }
+  else if (days <= 120) { for (let t = new Date(start); t < end; t = new Date(t.getTime() + 7 * 864e5)) { const b = new Date(Math.min(t.getTime() + 7 * 864e5, end.getTime())); out.push({ a: t, b, l: String(t.getDate()).padStart(2, '0') + '/' + String(t.getMonth() + 1).padStart(2, '0') }); } }
+  else { for (let t = new Date(start.getFullYear(), start.getMonth(), 1); t < end; t = new Date(t.getFullYear(), t.getMonth() + 1, 1)) { const a = t < start ? start : t, b = new Date(Math.min(new Date(t.getFullYear(), t.getMonth() + 1, 1).getTime(), end.getTime())); out.push({ a, b, l: MES[t.getMonth()] + '/' + String(t.getFullYear()).slice(2) }); } }
+  return out.map(x => ({ ...x, v: jobsIn(x.a, x.b, list).length }));
+}
+function nvSvg(items) {
+  const n = items.length, W = Math.max(320, n * 30), H = 140, mx = Math.max(1, ...items.map(x => x.v)), bw = Math.min(26, W / n - 4), step = (W - 20) / n;
+  return `<svg class="wk" viewBox="0 0 ${W} ${H}" role="img" aria-label="Novas vagas por período">${items.map((x, i) => { const bh = Math.round((H - 38) * x.v / mx), cx = 10 + step * i + step / 2; return `<rect x="${cx - bw / 2}" y="${H - 20 - bh}" width="${bw}" height="${Math.max(x.v ? 2 : 0, bh)}" rx="4"/>${x.v ? `<text class="v" x="${cx}" y="${H - 24 - bh}" text-anchor="middle">${x.v}</text>` : ''}${n <= 12 || i % 2 === 0 || i === n - 1 ? `<text x="${cx}" y="${H - 6}" text-anchor="middle">${x.l}</text>` : ''}`; }).join('')}</svg>`;
+}
+function newJobsCards(list) {
+  const today = dayStart(new Date()), end = new Date(today.getTime() + 864e5), s7 = new Date(today.getTime() - 6 * 864e5), p7 = new Date(s7.getTime() - 7 * 864e5);
+  const last7 = jobsIn(s7, end, list).sort((a, b) => new Date(jobOpenDate(b)) - new Date(jobOpenDate(a))), prev7 = jobsIn(p7, s7, list).length;
+  const trend = (n, p, w = ['7 dias anteriores', 'nos 7 dias anteriores']) => p === 0 && n === 0 ? 'sem vagas novas nos dois períodos' : p === 0 ? `nenhuma ${w[1]}` : `${n >= p ? '▲ +' : '▼ '}${Math.round(100 * (n - p) / p)}% vs. ${w[0]} (${p})`;
+  const r = nvRange(), nv = ui.nv, items = nvBuckets(r.start, r.end, list), tot = items.reduce((s, x) => s + x.v, 0), len = r.end - r.start, prev = jobsIn(new Date(r.start.getTime() - len), r.start, list).length;
+  const gran = items.length && Math.round(len / 864e5) <= 14 ? 'por dia' : Math.round(len / 864e5) <= 120 ? 'por semana' : 'por mês', maxI = items.reduce((m, x) => x.v > (m ? m.v : -1) ? x : m, null);
+  return `<div class="g2 mt"><div class="card"><h3>Novas vagas nos últimos 7 dias</h3><div class="flex gap-l wrap" style="align-items:baseline"><b style="font:700 40px var(--fd);letter-spacing:-.02em">${last7.length}</b><span class="sm mut">${trend(last7.length, prev7)}</span></div>
+  ${last7.length ? `<ul class="sm mt-s" style="padding-left:18px;margin:6px 0 0">${last7.slice(0, 5).map(j => `<li><a href="#/s/vaga/${j.id}">${esc(j.title)}</a> <span class="mut">— ${esc(compName(j.companyId))}, ${fdate(jobOpenDate(j))}</span></li>`).join('')}${last7.length > 5 ? `<li class="mut">e mais ${last7.length - 5}</li>` : ''}</ul>` : '<p class="sm mut mt-s">Nenhuma vaga aberta neste período.</p>'}<p class="xs mut mt-s">Conta vagas publicadas (ou criadas, se nunca foram publicadas), sem rascunhos.</p></div>
+  <div class="card"><div class="flex between gap wrap"><h3>Novas vagas por período</h3><select data-act="nvSel" aria-label="Período">${NV_OPTS.map(o => `<option value="${o[0]}" ${nv.p === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></div>
+  ${nv.p === 'custom' ? `<div class="flex gap wrap mt-s"><label class="field"><span>De</span><input type="date" data-act="nvDate" data-k="from" value="${isoDay(r.start)}" min="${isoDay((() => { const m = new Date(); m.setMonth(m.getMonth() - 24); m.setDate(1); return m; })())}" max="${isoDay(new Date())}"></label><label class="field"><span>Até</span><input type="date" data-act="nvDate" data-k="to" value="${isoDay(new Date(r.end.getTime() - 864e5))}" max="${isoDay(new Date())}"></label></div>${r.clamped ? '<p class="xs mut mt-s">O período máximo é de 24 meses; o início foi ajustado.</p>' : ''}` : ''}
+  <div class="flex gap-l wrap mt-s" style="align-items:baseline"><b style="font:700 40px var(--fd);letter-spacing:-.02em">${tot}</b><span class="sm mut">${tot === 1 ? 'vaga nova' : 'vagas novas'} no período · ${fdate(r.start)} a ${fdate(new Date(r.end.getTime() - 864e5))}</span></div>
+  <p class="sm mut">${trend(tot, prev, ['período anterior', 'no período anterior'])}${maxI && maxI.v ? ` · pico em ${maxI.l} (${maxI.v})` : ''}</p>
+  <div class="mt-s">${nvSvg(items)}</div><p class="xs mut">Barras ${gran}.</p></div></div>`;
+}
+/* ---------- Indicadores (tela própria): velocidade, funil, gargalos, motivos, clientes e recrutadores ---------- */
+const IND_PERIODS = [['30d', 'Últimos 30 dias'], ['90d', 'Últimos 90 dias'], ['6m', 'Últimos 6 meses'], ['12m', 'Últimos 12 meses'], ['all', 'Todo o histórico']];
+const avgOf = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
+const r1 = v => v == null ? null : Math.round(v * 10) / 10;
+function indRange() {
+  const p = ui.ind.p, today = dayStart(new Date()), end = new Date(today.getTime() + 864e5); let start;
+  if (p === 'all') return { start: new Date(0), end, prev: null };
+  if (p.endsWith('m')) start = new Date(today.getFullYear(), today.getMonth() - (parseInt(p) - 1), 1); else start = new Date(today.getTime() - (parseInt(p) - 1) * 864e5);
+  const len = end - start; return { start, end, prev: { start: new Date(start.getTime() - len), end: start } };
+}
+const inR = (d, a, b) => { if (!d) return false; const t = new Date(d).getTime(); return t >= a.getTime() && t < b.getTime(); };
+function indMetrics(jobs, a, b) {
+  const ids = new Set(jobs.map(j => j.id)), apps = db.apps.filter(x => ids.has(x.jobId)), inApps = apps.filter(x => inR(x.date, a, b));
+  const hires = apps.filter(x => x.stage === 'contratado' && inR(x.hiredDate, a, b));
+  const fills = jobs.map(j => { const h = apps.filter(x => x.jobId === j.id && x.hiredDate).map(x => x.hiredDate).sort()[0]; if (!h || !inR(h, a, b)) return null; const st = j.pubDate || (jobApps(j.id).map(x => x.date).sort()[0]); return st ? dayDiff(st, h) : null; }).filter(x => x != null);
+  const resp = inApps.filter(x => x.history.length > 1).map(x => (new Date(x.history[1].date) - new Date(x.date)) / 864e5);
+  const exits = apps.flatMap(x => x.history.filter(h => SIDE.includes(h.stage) && inR(h.date, a, b)).map(h => ({ reason: h.reason || x.reason || 'Motivo não registrado' })));
+  return { apps, inApps, hires: hires.length, fills, fill: r1(avgOf(fills)), conv: inApps.length >= 5 ? Math.round(100 * inApps.filter(x => x.stage === 'contratado').length / inApps.length) : null, resp: r1(avgOf(resp)), exits };
+}
+function indDelta(cur, prev, lowerBetter, suffix) {
+  if (cur == null || prev == null || prev === 0 && cur === 0) return '';
+  const diff = prev === 0 ? null : Math.round(100 * (cur - prev) / prev); if (diff === 0) return '<small>igual ao período anterior</small>';
+  const good = lowerBetter ? cur < prev : cur > prev, col = good ? 'var(--green)' : 'var(--red)';
+  return `<small style="color:${col}">${cur > prev ? '▲' : '▼'} ${diff == null ? 'de 0 no período anterior' : (diff > 0 ? '+' : '') + diff + '% vs. período anterior'}${suffix || ''}</small>`;
+}
+function indStageTimes(apps, a, b) {
+  const acc = {}; apps.filter(x => inR(x.date, a, b)).forEach(x => x.history.forEach((h, i) => { const n = x.history[i + 1]; if (!n || CLOSED.includes(h.stage)) return; (acc[h.stage] = acc[h.stage] || []).push((new Date(n.date) - new Date(h.date)) / 864e5); }));
+  return ['novo', 'triagem', 'entrevista_rh', 'entrevista_cliente', 'aprovado'].map(s => ({ s, n: (acc[s] || []).length, d: r1(avgOf(acc[s] || [])) }));
+}
+const IND_SUBS = [
+  ['geral', 'Visão geral', 'Situação de hoje da operação de recrutamento.'],
+  ['vagas', 'Vagas', 'Novas vagas, situação das vagas e as que mais recebem candidatos.'],
+  ['funil', 'Funil e conversão', 'Quantos candidatos chegam a cada etapa e quantos viram contratação.'],
+  ['velocidade', 'Velocidade', 'Quanto tempo o processo leva e onde ele trava.'],
+  ['motivos', 'Motivos de saída', 'Por que candidatos são reprovados ou desistem.'],
+  ['clientes', 'Clientes', 'Resultado por empresa cliente.'],
+  ['recrutadores', 'Recrutadores', 'Resultado por recrutador.']
+];
+function indCtx() {
+  const u = curUser(), ind = ui.ind = ui.ind || { p: '90d', co: '', rec: '' }, rg = indRange(), staffList = db.users.filter(isStaff);
+  const scope = db.jobs.filter(j => j.status !== 'draft' && (!ind.co || j.companyId === ind.co) && (!ind.rec || j.recruiterId === ind.rec));
+  const cur = indMetrics(scope, rg.start, rg.end), prv = rg.prev ? indMetrics(scope, rg.prev.start, rg.prev.end) : null;
+  const open = scope.filter(j => j.status === 'open'), stats7 = open.map(jobStats), stuck = stats7.filter(s => s.idle >= 7).sort((a, b) => b.idle - a.idle), empty = stats7.filter(s => !s.apps.length && s.days >= 3);
+  return { u, ind, rg, staffList, scope, cur, prv, open, stuck, empty };
+}
+const indK = (l, v, sub, tip) => `<div class="kpi"${tip ? ` title="${esc(tip)}"` : ''}><span>${l}</span><b>${v}</b>${sub || ''}</div>`;
+const dayTxt = v => v == null ? '—' : v + (v === 1 ? ' dia' : ' dias');
+function indFilters(c, withPeriod) {
+  const ind = c.ind, sel1 = (k2, arr, ph) => `<select data-act="indSel" data-k="${k2}" aria-label="${esc(ph)}">${opts(arr, ind[k2], ph)}</select>`;
+  return `<div class="card mb"><div class="flex gap wrap" style="align-items:flex-end">${withPeriod ? `<label class="field" style="min-width:190px"><span>Período</span><select data-act="indSel" data-k="p">${IND_PERIODS.map(o => `<option value="${o[0]}" ${ind.p === o[0] ? 'selected' : ''}>${o[1]}</option>`).join('')}</select></label>` : ''}<label class="field" style="min-width:220px"><span>Cliente</span>${sel1('co', db.companies.map(x => [x.id, x.name]), 'Todos os clientes')}</label><label class="field" style="min-width:200px"><span>Recrutador</span>${sel1('rec', c.staffList.map(x => [x.id, x.name]), 'Todos')}</label></div>${withPeriod ? `<p class="xs mut mt-s">${ind.p === 'all' ? 'Todo o histórico' : fdate(c.rg.start) + ' a ' + fdate(new Date(c.rg.end.getTime() - 864e5))}. Candidaturas, contratações e saídas são contadas pela data em que ocorreram; vagas abertas e paradas mostram a situação de hoje.</p>` : ''}</div>`;
+}
+function indRowFor(c, jobs, label, extra) {
+  const m = indMetrics(jobs, c.rg.start, c.rg.end), op = jobs.filter(j => j.status === 'open'), st = op.map(jobStats).filter(s => s.idle >= 7).length;
+  return { label, op: op.length, cl: jobs.filter(j => j.status === 'closed').length, apps: m.inApps.length, hires: m.hires, fill: m.fill, nf: m.fills.length, conv: m.conv, stuck: st, live: m.apps.filter(x => !CLOSED.includes(x.stage)).length, ...extra };
+}
+function indTable(rows, first, link) {
+  return `<div class="tw"><table><thead><tr><th>${first}</th><th>Vagas abertas</th><th>Encerradas</th><th>Candidaturas</th><th>Em andamento</th><th>Contratações</th><th>Tempo de fechamento</th><th>Taxa de contratação</th><th>Vagas paradas</th>${link ? '<th></th>' : ''}</tr></thead><tbody>${rows.map(r => `<tr><td class="b">${esc(r.label)}</td><td>${r.op}</td><td>${r.cl}</td><td>${r.apps}</td><td>${r.live}</td><td>${r.hires}</td><td>${r.fill == null ? '—' : dayTxt(r.fill) + ` <span class="xs mut">(${r.nf})</span>`}</td><td>${r.conv == null ? '<span class="mut" title="Menos de 5 candidaturas no período">—</span>' : r.conv + '%'}</td><td>${r.stuck ? `<span class="badge" style="--c:var(--sun)">${r.stuck}</span>` : '0'}</td>${link ? `<td style="text-align:right"><button class="btn sm" data-act="rpOpenCo" data-id="${r.id}">Relatório</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="10" class="center mut" style="padding:24px">Sem dados para os filtros escolhidos.</td></tr>'}</tbody></table></div>`;
+}
+function indicadoresView(sub) {
+  sub = IND_SUBS.some(x => x[0] === sub) ? sub : 'geral';
+  const u = curUser(), meta = IND_SUBS.find(x => x[0] === sub), title = sub === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : meta[1];
+  const head = `<p class="sm mb"><a href="#/s/indicadores/geral">Indicadores</a> / ${esc(title)}</p>${pageHead(esc(title), meta[2])}`;
+  if (sub === 'geral') return shell(head + indGeral());
+  const c = indCtx(), { ind, rg, cur, prv, scope } = c; let body = '';
+  if (sub === 'vagas') {
+    const js = db.jobs.filter(j => (!ind.co || j.companyId === ind.co) && (!ind.rec || j.recruiterId === ind.rec)), cnt = s2 => js.filter(j => j.status === s2).length;
+    const top = js.filter(j => j.status !== 'draft').map(j => ({ l: j.title + ' (' + compName(j.companyId).split(' ')[0] + ')', v: jobApps(j.id).length })).sort((a, b) => b.v - a.v).slice(0, 6);
+    body = indFilters(c, false).replace(/<p class="xs[^]*?<\/p>/, '') + `<div class="kpis">${indK('Vagas abertas', cnt('open'))}${indK('Pausadas', cnt('paused'))}${indK('Encerradas', cnt('closed'))}${indK('Rascunhos', cnt('draft'))}</div>${newJobsCards(js)}<div class="card mt"><h3>Vagas com mais candidatos</h3><div class="wide-lbl">${hbars(top)}</div></div>`;
+  } else if (sub === 'funil') {
+    const reached = RPT_FUNNEL.map(st => ({ st, v: cur.inApps.filter(x => x.history.some(h => h.stage === st)).length }));
+    body = indFilters(c, true) + `<div class="kpis">${indK('Candidaturas', cur.inApps.length, prv ? indDelta(cur.inApps.length, prv.inApps.length, false) : '')}${indK('Contratações', cur.hires, prv ? indDelta(cur.hires, prv.hires, false) : '')}${indK('Taxa de contratação', cur.conv == null ? '—' : cur.conv + '%', cur.conv == null ? '<small>dados insuficientes (menos de 5)</small>' : `<small>de ${cur.inApps.length} candidaturas</small>` + (prv && prv.conv != null ? indDelta(cur.conv, prv.conv, false) : ''), 'Das candidaturas recebidas no período, quantas viraram contratação')}</div>
+    <div class="card mt"><h3>Funil de conversão</h3><p class="xs mut mb">Candidaturas recebidas no período e quantas chegaram a cada etapa.</p><div class="tw" style="border:0"><table><thead><tr><th>Etapa</th><th>Chegaram</th><th>Da etapa anterior</th><th>Do total</th></tr></thead><tbody>${reached.map((r, i) => `<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ST[r.st].c};margin-right:6px"></span>${ST[r.st].name}</td><td class="b">${r.v}</td><td>${i && reached[i - 1].v ? Math.round(100 * r.v / reached[i - 1].v) + '%' : '—'}</td><td>${reached[0].v ? Math.round(100 * r.v / reached[0].v) + '%' : '—'}</td></tr>`).join('')}</tbody></table></div></div>`;
+  } else if (sub === 'velocidade') {
+    const stg = indStageTimes(cur.apps, rg.start, rg.end), worst = stg.filter(x => x.d != null && x.n >= 3).sort((a, b) => b.d - a.d)[0], mxd = Math.max(1, ...stg.map(y => y.d || 0));
+    body = indFilters(c, true) + `<div class="kpis">${indK('Tempo de fechamento', cur.fill == null ? '—' : dayTxt(cur.fill), cur.fills.length ? `<small>${cur.fills.length} ${cur.fills.length === 1 ? 'vaga fechada' : 'vagas fechadas'}</small>` + (prv ? indDelta(cur.fill, prv.fill, true) : '') : '<small>sem fechamentos no período</small>', 'Dias entre a abertura da vaga e a primeira contratação, nas vagas que fecharam no período')}${indK('Primeira resposta', cur.resp == null ? '—' : dayTxt(cur.resp), '<small>da candidatura ao 1º contato</small>' + (prv ? indDelta(cur.resp, prv.resp, true) : ''), 'Tempo médio entre receber a candidatura e a primeira movimentação')}${indK('Vagas paradas', c.stuck.length, '<small>sem movimento há 7+ dias</small>')}</div>
+    <div class="card mt"><h3>Tempo em cada etapa</h3><p class="xs mut mb">Média de dias que o candidato fica em cada etapa antes de avançar.</p>${stg.some(x => x.d != null) ? '<div class="wide-lbl">' + stg.map(x => `<div class="hbar" style="--c:${ST[x.s].c}"><span>${x.s === 'entrevista_cliente' ? 'Aguardando cliente' : ST[x.s].name}</span><span class="tr"><i style="width:${x.d == null ? 0 : Math.round(100 * x.d / mxd)}%"></i></span><b>${x.d == null ? '—' : x.d + ' d'}</b></div>`).join('') + '</div>' + (worst ? `<p class="sm mt-s"><b>Gargalo:</b> ${worst.s === 'entrevista_cliente' ? 'a espera pelo retorno do cliente' : 'a etapa "' + ST[worst.s].name + '"'} (${worst.d} dias em média).</p>` : '') : '<p class="mut sm">Sem movimentações suficientes no período.</p>'}</div>
+    <div class="card mt"><h3>Vagas que precisam de atenção</h3>${c.stuck.length || c.empty.length ? `<div class="tw" style="border:0"><table><thead><tr><th>Vaga</th><th>Cliente</th><th>Recrutador</th><th>Situação</th><th></th></tr></thead><tbody>${c.stuck.map(s => `<tr><td class="b">${esc(s.j.title)}</td><td>${esc(compName(s.j.companyId))}</td><td>${esc((by('users', s.j.recruiterId) || {}).name || '—')}</td><td><span class="badge" style="--c:var(--sun)">${s.idle} dias sem movimento</span> <span class="xs mut">${s.live.length} em andamento</span></td><td style="text-align:right;white-space:nowrap"><a class="btn sm" href="#/s/vaga/${s.j.id}">Kanban</a> <a class="btn sm" href="#/s/relatorios/ver?jobs=${s.j.id}">Relatório</a></td></tr>`).join('')}${c.empty.map(s => `<tr><td class="b">${esc(s.j.title)}</td><td>${esc(compName(s.j.companyId))}</td><td>${esc((by('users', s.j.recruiterId) || {}).name || '—')}</td><td><span class="badge" style="--c:var(--red)">Sem candidaturas há ${s.days} dias</span></td><td style="text-align:right"><a class="btn sm" href="#/s/vaga/${s.j.id}">Kanban</a></td></tr>`).join('')}</tbody></table></div>` : '<p class="sm mut">Nenhuma vaga parada. Todas as vagas abertas tiveram movimento nos últimos 7 dias.</p>'}</div>`;
+  } else if (sub === 'motivos') {
+    const rs = {}; cur.exits.forEach(e => { rs[e.reason] = (rs[e.reason] || 0) + 1; });
+    const rsList = Object.entries(rs).sort((a, b) => b[1] - a[1]).map(([l, v]) => ({ l, v, c: l === 'Motivo não registrado' ? 'var(--mut)' : 'var(--pri)' }));
+    body = indFilters(c, true) + `<div class="card"><h3>Motivos de saída</h3><p class="xs mut mb">Candidatos que foram reprovados ou desistiram no período (${cur.exits.length}).</p><div class="wide-lbl">${hbars(rsList)}</div>${rs['Motivo não registrado'] ? `<p class="xs mut mt-s">${rs['Motivo não registrado']} saída(s) sem motivo registrado. Registrar o motivo deixa este indicador mais confiável.</p>` : ''}</div>`;
+  } else if (sub === 'clientes') {
+    const byCo = db.companies.filter(x => !ind.co || x.id === ind.co).map(x => indRowFor(c, scope.filter(j => j.companyId === x.id), x.name, { id: x.id })).filter(r => r.op + r.cl + r.apps > 0).sort((a, b) => b.hires - a.hires || b.apps - a.apps);
+    body = indFilters(c, true) + indTable(byCo, 'Cliente', true);
+  } else {
+    const recs = c.staffList.filter(x => (!ind.rec || x.id === ind.rec) && (u.role === 'admin' || x.id === u.id)), byRec = recs.map(x => indRowFor(c, scope.filter(j => j.recruiterId === x.id), x.name + (x.id === u.id ? ' (você)' : ''), { id: x.id })).filter(r => r.op + r.cl + r.apps > 0).sort((a, b) => b.hires - a.hires);
+    body = indFilters(c, true) + indTable(byRec, 'Recrutador', false) + (u.role === 'admin' ? '<p class="xs mut mt-s">Use estes números para apoiar a equipe e equilibrar a carga de trabalho, não para comparar pessoas isoladamente: o tipo e a dificuldade das vagas mudam o resultado. Recrutadores veem apenas os próprios números.</p>' : '');
+  }
+  const defs = `<details class="mt"><summary class="b">Como cada indicador é calculado</summary><ul class="sm mt-s" style="padding-left:18px"><li><b>Tempo de fechamento:</b> dias entre a abertura da vaga e a primeira contratação, nas vagas que fecharam no período.</li><li><b>Taxa de contratação:</b> das candidaturas recebidas no período, quantas viraram contratação. Aparece só com 5 ou mais candidaturas, para não enganar com amostras pequenas.</li><li><b>Primeira resposta:</b> dias entre receber a candidatura e a primeira movimentação feita pela equipe.</li><li><b>Tempo em cada etapa:</b> média de dias entre entrar na etapa e avançar. "Aguardando cliente" é o tempo na etapa de entrevista com a empresa.</li><li><b>Vaga parada:</b> vaga aberta sem nenhuma movimento há 7 dias ou mais.</li><li><b>Comparação:</b> o período anterior tem o mesmo tamanho do escolhido. Setas verdes indicam melhora; para tempos, quanto menor, melhor.</li></ul></details>`;
+  return shell(head + body + (['funil', 'velocidade', 'clientes', 'recrutadores'].includes(sub) ? defs : ''));
+}
+function indGeral() {
+  const s = stats(), apps = db.apps;
   const weeks = [...Array(8)].map((_, i) => { const end = Date.now() - (7 - i) * 7 * 864e5, st = end - 7 * 864e5; return { l: i === 7 ? 'Atual' : `-${7 - i}s`, v: apps.filter(a => { const t = new Date(a.date).getTime(); return t > st && t <= end + 864e5; }).length }; });
   const mx = Math.max(1, ...weeks.map(w => w.v)), W = 320, H = 130;
   const svg = `<svg class="wk" viewBox="0 0 ${W} ${H}" role="img" aria-label="Novas candidaturas por semana">${weeks.map((w, i) => { const bh = Math.round((H - 34) * w.v / mx), x = 10 + i * 38; return `<rect x="${x}" y="${H - 18 - bh}" width="26" height="${bh}" rx="4"/><text class="v" x="${x + 13}" y="${H - 22 - bh}" text-anchor="middle">${w.v}</text><text x="${x + 13}" y="${H - 5}" text-anchor="middle">${w.l}</text>`; }).join('')}</svg>`;
@@ -736,28 +928,159 @@ function dashboard() {
   const topJobs = db.jobs.map(j => ({ l: j.title + ' (' + compName(j.companyId).split(' ')[0] + ')', v: jobApps(j.id).length })).sort((a, b) => b.v - a.v).slice(0, 6);
   const reached = ['novo', 'triagem', 'entrevista_rh', 'entrevista_cliente', 'aprovado', 'contratado'].map(id => ({ id, v: apps.filter(a => a.history.some(h => h.stage === id)).length }));
   const funnel = reached.map(r => ({ l: ST[r.id].short, v: r.v, c: ST[r.id].c }));
+  const k = (l, v, sub) => `<div class="kpi"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  return `<div class="kpis">${k('Vagas abertas', s.open)}${k('Vagas encerradas', s.closed)}${k('Total de candidatos', s.total)}${k('Candidatos ativos', s.active, 'com processo em andamento')}${k('Novos (30 dias)', s.fresh)}${k('Processos em andamento', s.proc)}${k('Entrevistas agendadas', s.inter)}${k('Contratações', s.hires)}${k('Conversão', s.conv + '%', 'candidaturas em contratação')}${k('Tempo médio', s.avgDays ? s.avgDays + ' dias' : '—', 'candidatura até contratação')}</div>
+  <div class="g2 mt"><div class="card"><h3>Candidatos por etapa</h3>${hbars(byStage)}</div><div class="card"><h3>Novas candidaturas por semana</h3>${svg}</div>
+  <div class="card"><h3>Vagas com mais candidatos</h3>${hbars(topJobs)}</div><div class="card"><h3>Funil: quantos chegaram a cada etapa</h3>${hbars(funnel)}</div></div>`;
+}
+function dashboard() {
+  const u = curUser(), apps = db.apps;
   const todo = [], oldNew = apps.filter(a => a.stage === 'novo' && Date.now() - new Date(a.date) > 2 * 864e5).length;
   if (oldNew) todo.push(`<a href="#/s/triagem">${oldNew} candidaturas novas aguardam triagem há mais de 2 dias</a>`);
   const rq = db.requests.filter(r => r.status === 'nova').length; if (rq) todo.push(`<a href="#/s/solicitacoes">${rq} solicitação de vaga de empresa cliente</a>`);
   const cl = apps.filter(a => a.stage === 'entrevista_cliente' && !a.clientDecision).length; if (cl) todo.push(`${cl} candidatos aguardando avaliação das empresas`);
   const dr = db.delReqs.filter(r => r.status === 'pendente').length; if (dr && u.role === 'admin') todo.push(`<a href="#/s/lgpd">${dr} pedido de exclusão de dados (LGPD)</a>`);
-  const k = (l, v, sub) => `<div class="kpi"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
-  return shell(`${pageHead('Olá, ' + esc(u.name.split(' ')[0]), 'Visão geral da operação de recrutamento.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a><a class="btn" href="#/s/banco">Buscar no banco</a>`)}
-  <div class="kpis">${k('Vagas abertas', s.open)}${k('Vagas encerradas', s.closed)}${k('Total de candidatos', s.total)}${k('Candidatos ativos', s.active, 'com processo em andamento')}${k('Novos (30 dias)', s.fresh)}${k('Processos em andamento', s.proc)}${k('Entrevistas agendadas', s.inter)}${k('Contratações', s.hires)}${k('Conversão', s.conv + '%', 'candidaturas em contratação')}${k('Tempo médio', s.avgDays ? s.avgDays + ' dias' : '—', 'candidatura até contratação')}</div>
-  <div class="g2 mt"><div class="card"><h3>Candidatos por etapa</h3>${hbars(byStage)}</div><div class="card"><h3>Novas candidaturas por semana</h3>${svg}</div>
-  <div class="card"><h3>Vagas com mais candidatos</h3>${hbars(topJobs)}</div><div class="card"><h3>Funil: quantos chegaram a cada etapa</h3>${hbars(funnel)}</div></div>
+  const nc = db.cands.filter(c => !c.deleted).length;
+  return shell(`${pageHead('Olá, ' + esc(u.name.split(' ')[0]), 'O que precisa da sua atenção hoje.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a><a class="btn" href="#/s/banco">Buscar no banco</a><a class="btn" href="#/s/indicadores/geral">${ico('trend', 16)} Ver indicadores</a>`)}
+  ${u.role === 'admin' ? `<div class="kpis"><div class="kpi"><span>Candidatos cadastrados</span><b>${nc}</b><small>perfis no banco de talentos</small></div></div>` : ''}
   <div class="card mt"><h3>Precisa de atenção</h3>${todo.length ? `<ul>${todo.map(t => `<li>${t}</li>`).join('')}</ul>` : '<p class="mut">Nada pendente.</p>'}</div>`);
 }
 
 /* ---------- Vagas (gestão) ---------- */
 const JOB_ST = { open: ['Aberta', 'var(--green)'], draft: ['Rascunho', 'var(--mut)'], paused: ['Pausada', 'var(--sun)'], closed: ['Encerrada', 'var(--red)'] };
 const jobStBadge = s => `<span class="badge dot" style="--c:${JOB_ST[s][1]}">${JOB_ST[s][0]}</span>`;
+/* ---------- Relatórios por cliente e por vaga ---------- */
+const RPT_COLORS = ['#0E5A4E', '#3A6FD8', '#D98A0B', '#C4487D', '#7A5BD0', '#2E9E5B', '#D8493E', '#7B8794'];
+const median = a => { a = a.filter(x => x > 0).sort((x, y) => x - y); if (!a.length) return 0; const m = a.length >> 1; return a.length % 2 ? a[m] : Math.round((a[m - 1] + a[m]) / 2); };
+const dayDiff = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 864e5));
+const pct = (n, t) => t ? Math.round(100 * n / t) : 0;
+const RPT_FUNNEL = ['novo', 'triagem', 'entrevista_rh', 'entrevista_cliente', 'aprovado', 'contratado'];
+function jobStats(j) {
+  const apps = jobApps(j.id).slice().sort((a, b) => new Date(a.date) - new Date(b.date)), now = nowISO();
+  const hired = apps.filter(a => a.stage === 'contratado'), exits = apps.filter(a => SIDE.includes(a.stage)), live = apps.filter(a => !CLOSED.includes(a.stage));
+  const prets = apps.map(a => +a.salary || (by('cands', a.candId) || {}).salary || 0).filter(x => x > 0);
+  const med = median(prets), avg = prets.length ? Math.round(prets.reduce((s, x) => s + x, 0) / prets.length) : 0, teto = j.salMax || 0;
+  const evs = apps.flatMap(a => a.history.map(h => h.date)).sort(), last = evs[evs.length - 1] || null;
+  const start = j.pubDate || (apps[0] && apps[0].date) || null, hd = hired.map(a => a.hiredDate).filter(Boolean).sort();
+  const end = j.status === 'closed' ? (j.closedAt || hd[hd.length - 1] || last || now) : now;
+  const reasons = {}; exits.forEach(a => { const r = a.reason || 'Motivo não registrado'; reasons[r] = (reasons[r] || 0) + 1; });
+  const reached = Object.fromEntries(RPT_FUNNEL.map(s => [s, apps.filter(a => a.history.some(h => h.stage === s)).length]));
+  const first = s => { const d = apps.flatMap(a => a.history.filter(h => h.stage === s).map(h => h.date)).sort(); return d[0] || null; };
+  return { j, apps, hired, exits, live, prets, med, avg, teto, within: prets.filter(x => x <= teto).length, dist: teto && med ? Math.round(100 * (med - teto) / teto) : null,
+    days: start ? dayDiff(start, end) : 0, start, end, last, idle: j.status === 'open' && last ? dayDiff(last, now) : 0, contacted: apps.length + db.invites.filter(i => i.jobId === j.id && !apps.some(a => a.candId === i.candId)).length,
+    reasons, reached, timeline: [['Vaga publicada', start], ['Primeira candidatura', apps[0] && apps[0].date], ['Primeira triagem', first('triagem')], ['Primeira entrevista com RH', first('entrevista_rh')], ['Primeiro encaminhamento ao cliente', first('entrevista_cliente')], ['Contratação', hd[0] || null]].filter(x => x[1]) };
+}
+const reasonGroup = r => /Sal[aá]rio|Pretens/i.test(r) ? 'sal' : /retorno|compareceu/i.test(r) ? 'sil' : /t[eé]cnico|Requisito/i.test(r) ? 'tec' : /Modelo/i.test(r) ? 'mod' : /outra proposta/i.test(r) ? 'out' : 'oth';
+function jobDiag(s) {
+  const d = [], g = [], j = s.j, ex = s.exits.length, cnt = k => s.exits.filter(a => reasonGroup(a.reason || '') === k).length, round50 = v => Math.ceil(v / 50) * 50;
+  if (!s.apps.length) { d.push(['Ainda sem candidaturas', 'A vaga não recebeu candidaturas até agora.', 'warn']); g.push(['Divulgar a vaga em novos canais e buscar ativamente no banco de talentos', 'Alto: gera os primeiros candidatos']); }
+  if (s.dist != null && s.dist > 5 && s.prets.length >= 3) { d.push(['Salário abaixo da pretensão dos candidatos', `A pretensão mediana (${brl(s.med)}) está ${s.dist}% acima do teto de ${brl(s.teto)}. Apenas ${s.within} de ${s.prets.length} candidatos pedem até o teto.`, 'bad']); g.push([`Rever o teto da vaga para cerca de ${brl(round50(s.med))} (mediana das pretensões) ou reforçar benefícios e plano de carreira`, 'Alto: reduz desistências por salário']); }
+  if (ex >= 3 && pct(cnt('sal'), ex) >= 25) d.push(['Salário é um dos principais motivos de saída', `${cnt('sal')} de ${ex} saídas (${pct(cnt('sal'), ex)}%) foram por salário ou pretensão acima da faixa.`, 'bad']);
+  if (ex >= 3 && pct(cnt('sil'), ex) >= 20) { d.push(['Silêncio dos candidatos', `${cnt('sil')} de ${ex} saídas (${pct(cnt('sil'), ex)}%) foram por falta de retorno ou não comparecimento.`, 'warn']); g.push(['Confirmar o interesse por mensagem curta antes de agendar e combinar um prazo de resposta', 'Médio: reduz faltas e retrabalho']); }
+  if (ex >= 3 && pct(cnt('tec'), ex) >= 25) { d.push(['Perfil técnico fora do esperado', `${cnt('tec')} de ${ex} saídas (${pct(cnt('tec'), ex)}%) foram por perfil técnico ou requisito não atendido.`, 'warn']); g.push(['Avaliar profissionais em formação, com plano de desenvolvimento, e revisar os requisitos obrigatórios', 'Alto: amplia o número de candidatos']); }
+  if (ex >= 3 && pct(cnt('mod'), ex) >= 15) { d.push(['Modelo de trabalho afasta candidatos', `${cnt('mod')} de ${ex} saídas (${pct(cnt('mod'), ex)}%) foram pelo modelo de trabalho (${j.mode.toLowerCase()}).`, 'warn']); g.push(['Divulgar claramente o modelo de trabalho e oferecer a primeira conversa online', 'Médio: filtra quem não aceita o modelo']); }
+  if (s.idle >= 7) { d.push(['Decisão lenta', `Há ${s.idle} dias sem movimentação no processo desta vaga.`, 'warn']); g.push(['Combinar com o gestor um retorno em até 48 horas após cada entrevista', 'Alto: evita perder finalistas']); }
+  const f = s.reached; let worst = null; for (let i = 0; i < 4; i++) { const a = f[RPT_FUNNEL[i]], b = f[RPT_FUNNEL[i + 1]]; if (a - b >= 3 && (!worst || a - b > worst[0])) worst = [a - b, i, a, b]; }
+  if (worst) d.push(['Maior perda no funil', `De ${worst[2]} candidatos que chegaram a "${ST[RPT_FUNNEL[worst[1]]].name}", ${worst[3]} seguiram para "${ST[RPT_FUNNEL[worst[1] + 1]].name}".`, 'info']);
+  if (j.status === 'open' && s.apps.length && f.entrevista_cliente < 2 && s.days > 15) { d.push(['Poucos finalistas', `Somente ${f.entrevista_cliente} candidato(s) chegaram à entrevista com a empresa em ${s.days} dias.`, 'warn']); g.push(['Ampliar a busca ativa no banco de talentos para formar ao menos três finalistas', 'Médio: dá opção de escolha ao gestor']); }
+  if (s.hired.length) d.push(['Vaga com contratação', `${s.hired.length} contratação(ões) em ${s.days} dias de processo.`, 'ok']);
+  if (!d.length) d.push(['Processo dentro do esperado', 'Os dados atuais não mostram pontos críticos.', 'ok']);
+  return { d, g };
+}
+function rptPrefix(list) {
+  const used = new Set();
+  return list.map(s => { const w = strip(s.j.title).split(/\s+/).filter(x => x.length > 1 && !AI_STOP.has(x)); let p = (w.map(x => x[0]).join('').slice(0, 3) || 'V').toUpperCase(), n = 1, base = p; while (used.has(p)) p = base + (++n); used.add(p); return p; });
+}
+function rptRows(s, pfx, names) {
+  return s.apps.map((a, i) => { const c = by('cands', a.candId) || {}; return { a, code: pfx + (i + 1), name: names ? (c.name || '—') : '', date: a.date, pret: +a.salary || c.salary || 0, stage: ST[a.stage].name, reason: a.reason || '', note: a.reasonNote || '', side: SIDE.includes(a.stage) }; });
+}
+const rptBar = (v, max, color) => `<span class="rb"><i style="width:${max ? Math.max(2, Math.round(100 * v / max)) : 0}%;background:${color}"></i></span>`;
+const rptCur = () => { const c = ui.rptCur || { ids: [] }; return { list: c.ids.map(id => by('jobs', id)).filter(Boolean).map(jobStats), co: c.co ? by('companies', c.co) : null }; };
+function rptBody() {
+  const { list, co } = rptCur(), names = !!ui.rptNames; if (!list.length) return '<div class="empty">Nenhuma vaga selecionada.</div>';
+  const single = list.length === 1, pfx = rptPrefix(list), cmp = list.map(s => s.j.companyId), compName1 = co ? co.name : compName(list[0].j.companyId);
+  const allOpen = list.every(s => s.j.status === 'open'), tot = list.reduce((o, s) => ({ c: o.c + s.contacted, h: o.h + s.hired.length, l: o.l + s.live.length, e: o.e + s.exits.length }), { c: 0, h: 0, l: 0, e: 0 });
+  const dists = list.map(s => s.dist).filter(x => x != null), days = list.map(s => s.days), recs = uniq(list.map(s => (by('users', s.j.recruiterId) || {}).name).filter(Boolean));
+  const title = single ? esc(list[0].j.title) : allOpen ? 'Vagas em aberto: acompanhamento do processo' : 'Histórico das vagas selecionadas';
+  const rg = (lbl, fn) => `<tr><th scope="row">${lbl}</th>${list.map(s => `<td>${fn(s)}</td>`).join('')}</tr>`;
+  const ul = a => `<ul>${(a || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+  const rsn = {}; list.forEach((s, i) => Object.entries(s.reasons).forEach(([r, n]) => { (rsn[r] = rsn[r] || Array(list.length).fill(0))[i] = n; }));
+  const rsnList = Object.entries(rsn).sort((a, b) => b[1].reduce((x, y) => x + y, 0) - a[1].reduce((x, y) => x + y, 0)), rmax = Math.max(1, ...rsnList.map(r => r[1].reduce((x, y) => x + y, 0)));
+  const reg = list.flatMap(s => s.exits).length, topR = rsnList.slice(0, 4);
+  const sev = { bad: '#B3261E', warn: '#9A6700', ok: '#1B7F4B', info: '#3A5BA0' };
+  const dg = list.map(s => ({ s, ...jobDiag(s) }));
+  return `<article class="rpt" id="rpt-doc">
+  <header class="rh"><div><div class="rk">Relatório de recrutamento e seleção · ${new Date().toLocaleDateString('pt-BR')}</div><h1>${title}</h1><div class="rm">Para: <b>${esc(compName1)}</b>${recs.length ? ` · Execução: <b>${recs.map(esc).join(', ')}</b>` : ''} · Vínculo</div></div></header>
+  <div class="rkpis"><div><b>${list.filter(s => s.j.status === 'open').length}</b><span>${list.filter(s => s.j.status === 'open').length === 1 ? 'vaga em aberto' : 'vagas em aberto'} (de ${list.length})</span></div><div><b>${tot.c}</b><span>profissionais contatados</span></div><div><b>${tot.h}</b><span>contratações</span></div><div><b>${days.length > 1 && Math.min(...days) !== Math.max(...days) ? Math.min(...days) + '–' + Math.max(...days) : days[0]}</b><span>dias de processo</span></div><div><b>${dists.length ? dists.map(x => (x > 0 ? '+' : '') + x + '%').join(' / ') : '—'}</b><span>pretensão mediana vs. teto${dists.length > 1 ? ' (por vaga)' : ''}</span></div></div>
+  <section class="rs"><h2>1. ${single ? 'Resumo da vaga' : 'As vagas'}</h2><div class="rtw"><table class="rt"><thead><tr><th>Indicador</th>${list.map((s, i) => `<th><span class="dot" style="background:${RPT_COLORS[i % 8]}"></span>${esc(s.j.title)}</th>`).join('')}</tr></thead><tbody>
+  ${rg('Abertura / responsável', s => `${s.start ? fdate(s.start) : 'Não publicada'}<br><span class="xs">${esc((by('users', s.j.recruiterId) || {}).name || '—')}</span>`)}
+  ${rg('Situação', s => `${JOB_ST[s.j.status][0]}${s.j.status === 'closed' && s.hired.length ? ' · preenchida' : ''}`)}
+  ${rg('Salário ofertado', s => s.j.salMin || s.j.salMax ? `${brl(s.j.salMin)} a ${brl(s.j.salMax)}<br><span class="xs">${esc(s.j.contract)}</span>` : '—')}
+  ${rg('Modelo e local', s => `${esc(s.j.mode)} · ${esc(s.j.city)}/${esc(s.j.state)}`)}
+  ${rg('Profissionais contatados', s => s.contacted)}
+  ${rg('Em andamento / contratados / saíram', s => `${s.live.length} / ${s.hired.length} / ${s.exits.length}`)}
+  ${rg('Pretensões informadas (mediana · média)', s => s.prets.length ? `${brl(s.med)} · ${brl(s.avg)}` : '—')}
+  ${rg('Distância do teto (mediana)', s => s.dist == null ? '—' : `<b style="color:${s.dist > 5 ? '#B3261E' : '#1B7F4B'}">${s.dist > 0 ? '+' : ''}${s.dist}%</b> · ${s.within} de ${s.prets.length} pedem até o teto`)}
+  ${list.some(s => s.j.marketRef) ? rg('Referência de mercado (informada)', s => s.j.marketRef ? `${brl(s.j.marketRef)}<br><span class="xs">${s.j.marketRef < s.teto ? 'teto ' + Math.round(100 * (s.teto - s.j.marketRef) / s.j.marketRef) + '% acima' : 'teto ' + Math.round(100 * (s.j.marketRef - s.teto) / s.j.marketRef) + '% abaixo'}</span>` : '—') : ''}
+  ${rg('Dias do processo', s => `${s.days}${s.idle ? `<br><span class="xs">${s.idle} dias sem movimentação</span>` : ''}`)}
+  </tbody></table></div></section>
+  <section class="rs"><h2>2. Perfil ${single ? 'da vaga' : 'das vagas'}</h2><div class="rtw"><table class="rt"><thead><tr><th>Item</th>${list.map(s => `<th>${esc(s.j.title)}</th>`).join('')}</tr></thead><tbody>
+  ${rg('Requisitos', s => ul(s.j.reqMand))}${rg('Atividades', s => ul((s.j.resp || []).slice(0, 4)))}${rg('Competências', s => (s.j.skills || []).map(esc).join(', ') || '—')}${rg('Benefícios', s => (s.j.benefits || []).map(esc).join(', ') || '—')}
+  </tbody></table></div></section>
+  <section class="rs"><h2>3. Funil do processo</h2><div class="rtw"><table class="rt"><thead><tr><th>Etapa</th>${list.map(s => `<th>${esc(s.j.title)}</th>`).join('')}</tr></thead><tbody>${RPT_FUNNEL.map(st => `<tr><th scope="row">${ST[st].name}</th>${list.map(s => `<td><div class="rbw">${rptBar(s.reached[st], s.reached.novo, ST[st].c)}<b>${s.reached[st]}</b><span class="xs">${pct(s.reached[st], s.reached.novo)}%</span></div></td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="rn">Quantidade de candidatos que chegaram a cada etapa em algum momento do processo.</p></section>
+  ${single && list[0].timeline.length ? `<section class="rs"><h2>4. Linha do tempo</h2><ol class="rtl">${list[0].timeline.map(t => `<li><b>${fdate(t[1])}</b> ${esc(t[0])}</li>`).join('')}</ol></section>` : ''}
+  <section class="rs"><h2>${single ? 5 : 4}. Por que os candidatos saem do processo (${tot.e} saídas)</h2>${rsnList.length ? `<div class="rcols"><div>${rsnList.map(([r, arr]) => { const t = arr.reduce((x, y) => x + y, 0); return `<div class="rr"><span class="rl">${esc(r)}</span><span class="rbs">${arr.map((n, i) => n ? `<i style="width:${100 * n / rmax}%;background:${RPT_COLORS[i % 8]}" title="${esc(list[i].j.title)}: ${n}"></i>` : '').join('')}</span><b>${t}</b></div>`; }).join('')}${single ? '' : `<div class="rleg">${list.map((s, i) => `<span><i style="background:${RPT_COLORS[i % 8]}"></i>${esc(s.j.title)}</span>`).join('')}</div>`}</div>
+  <div class="rread"><b>Leitura dos dados</b><ul>${topR.map(([r, arr]) => { const t = arr.reduce((x, y) => x + y, 0); return `<li><b>${esc(r)}:</b> ${t} de ${tot.e} (${pct(t, tot.e)}%)</li>`; }).join('')}</ul>${rsn['Motivo não registrado'] ? '<p class="xs">Há saídas sem motivo registrado. Preencher o motivo deixa esta análise mais precisa.</p>' : ''}</div></div>` : '<p class="rn">Ainda não há candidatos que tenham saído do processo.</p>'}</section>
+  <section class="rs"><h2>${single ? 6 : 5}. Histórico dos contatos ${names ? '' : '(candidatos identificados por código, conforme a LGPD)'}</h2>${list.map((s, i) => { const rows = rptRows(s, pfx[i], names); return `<h3 class="rh3"><span class="dot" style="background:${RPT_COLORS[i % 8]}"></span>${esc(s.j.title)}</h3><div class="rtw"><table class="rt sm"><thead><tr><th>Cód.</th>${names ? '<th>Candidato</th>' : ''}<th>Data</th><th>Pretensão</th><th>Desfecho</th></tr></thead><tbody>${rows.map(r => `<tr><td class="b">${esc(r.code)}</td>${names ? `<td>${esc(r.name)}</td>` : ''}<td>${fdate(r.date)}</td><td>${r.pret ? brl(r.pret) : '—'}</td><td>${esc(r.stage)}${r.side ? ` — ${r.reason ? esc(r.reason) : `<i>motivo não registrado</i> <button type="button" class="lnk noprint" data-act="reasonEdit" data-app="${r.a.id}">Registrar</button>`}${r.note ? ': ' + esc(r.note) : ''}` : ''}</td></tr>`).join('') || `<tr><td colspan="${names ? 5 : 4}" class="mut">Nenhuma candidatura.</td></tr>`}</tbody></table></div>`; }).join('')}</section>
+  <section class="rs"><h2>${single ? 7 : 6}. Diagnóstico</h2>${dg.map((x, i) => `${single ? '' : `<h3 class="rh3"><span class="dot" style="background:${RPT_COLORS[i % 8]}"></span>${esc(x.s.j.title)}</h3>`}<ul class="rdg">${x.d.map(r => `<li><b style="color:${sev[r[2]]}">${esc(r[0])}.</b> ${esc(r[1])}</li>`).join('')}</ul>${x.s.j.reportNote ? `<div class="rpar"><b>Parecer do recrutador</b><p>${esc(x.s.j.reportNote).replace(/\n/g, '<br>')}</p></div>` : ''}`).join('')}</section>
+  <section class="rs"><h2>${single ? 8 : 7}. Sugestões e efeito esperado</h2>${dg.some(x => x.g.length) ? `<div class="rtw"><table class="rt"><thead><tr><th>Sugestão</th>${single ? '' : '<th>Vaga</th>'}<th>Impacto</th></tr></thead><tbody>${dg.flatMap((x, i) => x.g.map(g => `<tr><td>${esc(g[0])}</td>${single ? '' : `<td>${esc(x.s.j.title)}</td>`}<td>${esc(g[1])}</td></tr>`)).join('')}</tbody></table></div>` : '<p class="rn">Sem sugestões no momento: os dados não indicam ajustes necessários.</p>'}<p class="rn">Diagnóstico e sugestões são gerados automaticamente a partir dos dados do sistema e servem de apoio. A decisão final é sempre do recrutador e do cliente.</p></section>
+  ${co && co.reportNote ? `<section class="rs"><h2>${single ? 9 : 8}. Considerações finais</h2><div class="rpar"><p>${esc(co.reportNote).replace(/\n/g, '<br>')}</p></div></section>` : ''}
+  <footer class="rf">Relatório gerado pelo Vínculo em ${new Date().toLocaleString('pt-BR')}. Dados pessoais de candidatos são protegidos; contatos só são liberados na contratação.</footer>
+  </article>`;
+}
+function reportView(query) {
+  const ids = String(query.jobs || '').split(',').filter(x => by('jobs', x)), cid = query.co && by('companies', query.co) ? query.co : '';
+  if (!ids.length) return shell(`${pageHead('Relatório', 'Nenhuma vaga selecionada.')}<div class="empty"><p><a class="btn pri" href="#/s/relatorios">Escolher vagas</a></p></div>`);
+  ui.rptCur = { ids, co: cid }; const jobs = ids.map(id => by('jobs', id)), co = cid ? by('companies', cid) : null;
+  return shell(`<div class="noprint"><p class="sm mb"><a href="#/s/relatorios">← Relatórios</a></p>${pageHead(jobs.length === 1 ? 'Relatório da vaga' : 'Relatório do cliente', 'Revise, complemente e imprima ou salve em PDF.', `<button class="btn" data-act="rptCsv">Baixar CSV</button><button class="btn pri" data-act="rptPrint">${ico('file', 14)} Imprimir / salvar PDF</button>`)}
+  <div class="card mb"><label class="check"><input type="checkbox" data-act="rptNames" ${ui.rptNames ? 'checked' : ''}> Mostrar o nome dos candidatos (uso interno)</label><p class="xs mut mt-s">Para enviar ao cliente, deixe desmarcado: os candidatos aparecem só por código. Os contatos são liberados apenas na contratação.</p>
+  <details class="mt"><summary class="b">Complementar o relatório (opcional)</summary><div class="stack mt">${jobs.map(j => `<div class="fg">${fld('Referência de mercado — ' + esc(j.title) + ' (R$)', `<input type="number" min="0" step="10" value="${j.marketRef || ''}" data-live="rptmkt" data-id="${j.id}" placeholder="Ex.: 3580 (fonte: CAGED ou pesquisa salarial)">`)}${fld('Parecer do recrutador — ' + esc(j.title), `<textarea rows="3" maxlength="1500" data-live="rptnote" data-id="${j.id}" placeholder="Sua leitura sobre esta vaga">${esc(j.reportNote || '')}</textarea>`)}</div>`).join('')}${co ? fld('Considerações finais para ' + esc(co.name), `<textarea rows="3" maxlength="1500" data-live="rptnote" data-co="${co.id}" placeholder="Mensagem final ao cliente">${esc(co.reportNote || '')}</textarea>`) : ''}</div></details></div></div>
+  <div id="rpt-body">${rptBody()}</div>${jobs.length > 3 ? '<style media="print">@page{size:A4 landscape;margin:10mm}</style>' : '<style media="print">@page{size:A4;margin:10mm}</style>'}`);
+}
+function reportsHub() {
+  const rp = ui.rp = ui.rp || { mode: 'cliente', co: '', sel: [], q: '', st: 'all' }, cos = db.companies;
+  if (!rp.co && cos[0]) rp.co = cos[0].id;
+  const jobsOf = id => db.jobs.filter(j => j.companyId === id && j.status !== 'draft').sort((a, b) => ({ open: 0, paused: 1, closed: 2 }[a.status] - { open: 0, paused: 1, closed: 2 }[b.status]) || new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+  const tabs = `<div class="opts mb">${[['cliente', 'Relatório por cliente'], ['vaga', 'Relatório por vaga']].map(x => `<label><input type="radio" name="rpm" ${rp.mode === x[0] ? 'checked' : ''} data-act="rpMode" data-v="${x[0]}">${x[1]}</label>`).join('')}</div>`;
+  let body;
+  if (rp.mode === 'cliente') {
+    const js = jobsOf(rp.co); rp.sel = rp.sel.filter(id => js.some(j => j.id === id));
+    body = `<div class="card"><div class="flex gap wrap" style="align-items:flex-end"><label class="field grow" style="max-width:420px"><span>Empresa cliente</span><select data-act="rpCo" aria-label="Empresa cliente">${cos.map(c => `<option value="${c.id}" ${c.id === rp.co ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><div class="flex gap wrap"><button class="btn sm" data-act="rpPick" data-v="live">Em andamento</button><button class="btn sm" data-act="rpPick" data-v="closed">Encerradas</button><button class="btn sm" data-act="rpPick" data-v="all">Todas</button><button class="btn sm" data-act="rpPick" data-v="none">Limpar</button></div></div>
+    <div class="tw mt"><table><thead><tr><th style="width:36px"></th><th>Vaga</th><th>Status</th><th>Candidatos</th><th>Publicada</th></tr></thead><tbody>${js.map(j => `<tr><td><input type="checkbox" data-act="rpToggle" data-id="${j.id}" ${rp.sel.includes(j.id) ? 'checked' : ''} aria-label="Incluir ${esc(j.title)}"></td><td class="b">${esc(j.title)}<div class="xs mut">${esc(j.city)}/${j.state} · ${j.mode}</div></td><td>${jobStBadge(j.status)}</td><td>${jobApps(j.id).length}</td><td class="xs">${j.pubDate ? fdate(j.pubDate) : '—'}</td></tr>`).join('') || '<tr><td colspan="5" class="center mut" style="padding:24px">Esta empresa ainda não tem vagas publicadas.</td></tr>'}</tbody></table></div>
+    <div class="flex between gap wrap mt"><span class="sm mut">${rp.sel.length} ${rp.sel.length === 1 ? 'vaga selecionada' : 'vagas selecionadas'}</span><button class="btn pri" data-act="rpGo">${ico('file', 14)} Gerar relatório do cliente</button></div></div>`;
+  } else {
+    const q = strip(rp.q || ''), list = db.jobs.filter(j => j.status !== 'draft' && (rp.st === 'all' || (rp.st === 'live' ? j.status !== 'closed' : j.status === 'closed')) && (!q || strip(j.title + ' ' + compName(j.companyId)).includes(q))).sort((a, b) => ({ open: 0, paused: 1, closed: 2 }[a.status] - { open: 0, paused: 1, closed: 2 }[b.status]) || new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+    body = `<div class="card"><div class="flex gap wrap mb" style="align-items:flex-end"><label class="field grow" style="max-width:360px"><span>Buscar vaga ou empresa</span><input type="search" data-live="rpq" value="${esc(rp.q || '')}" placeholder="Ex.: analista" autocomplete="off"></label><label class="field" style="min-width:180px"><span>Situação</span><select data-act="rpSt">${[['all', 'Todas'], ['live', 'Não concluídas'], ['closed', 'Encerradas']].map(x => `<option value="${x[0]}" ${rp.st === x[0] ? 'selected' : ''}>${x[1]}</option>`).join('')}</select></label></div><div id="rp-res">${rpJobsTable(list)}</div></div>`;
+  }
+  return shell(`${pageHead('Relatórios', 'Gere o histórico de uma vaga ou o relatório de um cliente com as vagas que você escolher.')}${tabs}${body}<p class="xs mut mt">Os relatórios usam os dados do sistema (candidaturas, etapas, pretensões e motivos de saída). Para ficarem completos, registre o motivo ao reprovar ou ao marcar desistência.</p>`);
+}
+const rpJobsTable = list => `<div class="tw"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Status</th><th>Candidatos</th><th></th></tr></thead><tbody>${list.map(j => `<tr><td class="b">${esc(j.title)}</td><td>${esc(compName(j.companyId))}</td><td>${jobStBadge(j.status)}</td><td>${jobApps(j.id).length}</td><td style="text-align:right"><a class="btn sm pri" href="#/s/relatorios/ver?jobs=${j.id}">Gerar relatório</a></td></tr>`).join('') || '<tr><td colspan="5" class="center mut" style="padding:24px">Nenhuma vaga encontrada.</td></tr>'}</tbody></table></div>`;
+function reasonModal(id, stage) {
+  const a = by('apps', id), c = by('cands', a.candId), job = by('jobs', a.jobId), edit = a.stage === stage;
+  openModal(edit ? 'Registrar motivo' : stage === 'desistiu' ? 'Registrar desistência' : 'Encerrar candidatura', `<form data-form="moveReason" data-app="${id}" data-stage="${stage}" class="stack"><p class="sm"><b>${esc(c.name)}</b> — ${esc(job.title)}</p>${fld('Motivo', sel('reason', REASONS[stage], a.reason || '', 'Selecione', 'required'))}${fld('Observação', `<textarea name="note" rows="2" maxlength="300" placeholder="Opcional. Aparece no histórico do relatório.">${esc(a.reasonNote || '')}</textarea>`)}<p class="xs mut">${edit ? 'O motivo alimenta os relatórios por vaga e por cliente.' : 'O candidato será avisado e continua no banco de talentos. O motivo alimenta os relatórios por vaga e por cliente.'}</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn ${edit ? 'pri' : 'danger'}">${edit ? 'Salvar motivo' : 'Confirmar'}</button></div></form>`);
+}
+function jobsAdminRes() {
+  const f = ui.jobsAdmin || 'all', terms = strip(ui.jobsQ || '').split(/\s+/).filter(Boolean);
+  const list = db.jobs.filter(j => (f === 'all' || j.status === f) && terms.every(t => strip(j.title + ' ' + compName(j.companyId) + ' ' + j.city).includes(t))).sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+  return `<p class="sm mut mb">${list.length} ${list.length === 1 ? 'vaga' : 'vagas'}${terms.length ? ' encontradas' : ''}</p><div class="tw"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Status</th><th>Candidatos</th><th>Publicada</th><th>Responsável</th><th></th></tr></thead><tbody>${list.map(j => { const n = jobApps(j.id), r = by('users', j.recruiterId); return `<tr><td><a class="b" href="#/s/vaga/${j.id}">${esc(j.title)}</a><div class="xs mut">${esc(j.city)}/${j.state} — ${j.mode}</div></td><td>${esc(compName(j.companyId))}</td><td>${jobStBadge(j.status)}</td><td>${n.length} <span class="xs mut">(${n.filter(a => a.stage === 'novo').length} novos)</span></td><td>${j.pubDate ? fdate(j.pubDate) : '—'}</td><td>${r ? esc(r.name) : '—'}</td>
+  <td><div class="flex gap wrap" style="justify-content:flex-end"><a class="btn sm" href="#/s/vaga/${j.id}">${ico('board', 14)} Kanban</a><a class="btn sm" href="#/s/relatorios/ver?jobs=${j.id}">${ico('file', 14)} Relatório</a>${j.status === 'open' ? `<button class="btn sm" data-act="shareJob" data-id="${j.id}">${ico('link', 14)} Divulgar</button>` : ''}<a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar</a>${j.status !== 'open' && j.status !== 'closed' ? `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>` : ''}${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : ''}${j.status === 'closed' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="open">Reabrir</button>` : `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>`}<button class="btn sm ghost" data-act="dupJob" data-id="${j.id}" title="Duplicar">Duplicar</button></div></td></tr>`; }).join('') || '<tr><td colspan="7" class="center mut" style="padding:28px">Nenhuma vaga encontrada. Tente outro nome, cliente ou cidade, ou mude o filtro de status.</td></tr>'}</tbody></table></div>`;
+}
 function jobsAdmin() {
-  const f = ui.jobsAdmin || (ui.jobsAdmin = 'all'), list = db.jobs.filter(j => f === 'all' || j.status === f).sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
+  const f = ui.jobsAdmin || (ui.jobsAdmin = 'all');
   return shell(`${pageHead('Vagas', 'Crie, publique e acompanhe os processos.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a>`)}
+  <div class="flex gap wrap mb" style="align-items:flex-end"><label class="field grow" style="max-width:480px"><span>Buscar vaga</span><input type="search" data-live="jobsq" value="${esc(ui.jobsQ || '')}" placeholder="Nome da vaga, cliente ou cidade" autocomplete="off" aria-label="Buscar vaga por nome, cliente ou cidade"></label></div>
   <div class="opts mb">${[['all', 'Todas'], ['open', 'Abertas'], ['paused', 'Pausadas'], ['draft', 'Rascunhos'], ['closed', 'Encerradas']].map(x => `<label><input type="radio" name="jf" ${f === x[0] ? 'checked' : ''} data-act="jobsFilter" data-v="${x[0]}">${x[1]}</label>`).join('')}</div>
-  <div class="tw"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Status</th><th>Candidatos</th><th>Publicada</th><th>Responsável</th><th></th></tr></thead><tbody>${list.map(j => { const n = jobApps(j.id), r = by('users', j.recruiterId); return `<tr><td><a class="b" href="#/s/vaga/${j.id}">${esc(j.title)}</a><div class="xs mut">${esc(j.city)}/${j.state} — ${j.mode}</div></td><td>${esc(compName(j.companyId))}</td><td>${jobStBadge(j.status)}</td><td>${n.length} <span class="xs mut">(${n.filter(a => a.stage === 'novo').length} novos)</span></td><td>${j.pubDate ? fdate(j.pubDate) : '—'}</td><td>${r ? esc(r.name) : '—'}</td>
-  <td><div class="flex gap wrap" style="justify-content:flex-end"><a class="btn sm" href="#/s/vaga/${j.id}">${ico('board', 14)} Pipeline</a><a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar</a>${j.status !== 'open' && j.status !== 'closed' ? `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>` : ''}${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : ''}${j.status === 'closed' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="open">Reabrir</button>` : `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>`}<button class="btn sm ghost" data-act="dupJob" data-id="${j.id}" title="Duplicar">Duplicar</button></div></td></tr>`; }).join('')}</tbody></table></div>`);
+  <div id="ja-res">${jobsAdminRes()}</div>`);
 }
 const sqRow = (q = {}) => `<div class="rep" data-group="sq"><div style="grid-column:1/-1">${fld('Pergunta', inp('q', q.q, { ph: 'Ex.: Você possui CNH B?' }))}</div>${fld('Tipo de resposta', sel('type', [['yn', 'Sim/Não'], ['number', 'Número'], ['text', 'Texto livre']], q.type || 'yn'))}${fld('Resposta esperada', sel('expected', ['Sim', 'Não'], q.expected || 'Sim'), 'só Sim/Não')}<label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="ko" ${q.ko ? 'checked' : ''}> Eliminatória</label><button type="button" class="btn ghost sm" data-act="delRow" aria-label="Remover pergunta">${ico('x', 16)}</button></div>`;
 ROWS.sq = sqRow;
@@ -767,7 +1090,7 @@ function jobForm(id, pre) {
   const lines = a => esc((a || []).join('\n'));
   const staff = db.users.filter(x => isStaff(x));
   return shell(`${pageHead(j ? 'Editar vaga' : 'Nova vaga', j ? esc(j.title) : 'Preencha os dados e publique quando estiver pronto.')}
-  <form data-form="job" data-id="${id || ''}" data-req="${pre.req || ''}" class="stack"><div class="card"><h3>Dados principais</h3><div class="fg">${fld('Título da vaga', inp('title', v.title, { req: 1 }))}${fld('Empresa cliente', sel('companyId', db.companies.map(c => [c.id, c.name]), v.companyId, 'Selecione', 'required'))}${fld('Área', sel('area', AREA_LIST, v.area, 'Selecione', 'required'))}${fld('Recrutador responsável', sel('recruiterId', staff.map(s => [s.id, s.name]), v.recruiterId))}${fld('Cidade', inp('city', v.city, { req: 1 }))}${fld('Estado', sel('state', UF, v.state))}${fld('Modalidade', sel('mode', MODES, v.mode))}${fld('Tipo de contratação', sel('contract', CONTRACTS, v.contract))}${fld('Salário mínimo (R$)', inp('salMin', v.salMin, { type: 'number', attrs: 'min="0" step="100"' }))}${fld('Salário máximo (R$)', inp('salMax', v.salMax, { type: 'number', attrs: 'min="0" step="100"' }))}${fld('Quantidade de vagas', inp('qty', v.qty, { type: 'number', attrs: 'min="1"' }))}${fld('Prazo de candidatura', inp('deadline', v.deadline, { type: 'date' }))}</div></div>
+  <form data-form="job" data-id="${id || ''}" data-req="${pre.req || ''}" class="stack"><div class="card"><h3>Dados principais</h3><div class="fg">${fld('Título da vaga', inp('title', v.title, { req: 1, attrs: CARGO_ATTR }) + cargoDL())}${fld('Empresa cliente', sel('companyId', db.companies.map(c => [c.id, c.name]), v.companyId, 'Selecione', 'required'))}${fld('Área', sel('area', AREA_LIST, v.area, 'Selecione', 'required'))}${fld('Recrutador responsável', sel('recruiterId', staff.map(s => [s.id, s.name]), v.recruiterId))}${fld('Cidade', inp('city', v.city, { req: 1 }))}${fld('Estado', sel('state', UF, v.state))}${fld('Modalidade', sel('mode', MODES, v.mode))}${fld('Tipo de contratação', sel('contract', CONTRACTS, v.contract))}${fld('Salário mínimo (R$)', inp('salMin', v.salMin, { type: 'number', attrs: 'min="0" step="100"' }))}${fld('Salário máximo (R$)', inp('salMax', v.salMax, { type: 'number', attrs: 'min="0" step="100"' }))}${fld('Quantidade de vagas', inp('qty', v.qty, { type: 'number', attrs: 'min="1"' }))}${fld('Prazo de candidatura', inp('deadline', v.deadline, { type: 'date' }))}</div></div>
   <div class="card"><h3>Descrição</h3><div class="stack">${fld('Descrição da vaga', `<textarea name="desc" required>${esc(v.desc)}</textarea>`)}<div class="fg w2">${fld('Responsabilidades', `<textarea name="resp" placeholder="Uma por linha">${lines(v.resp)}</textarea>`, 'uma por linha')}${fld('Benefícios', `<textarea name="benefits" placeholder="Uma por linha">${lines(v.benefits)}</textarea>`, 'um por linha')}${fld('Requisitos obrigatórios', `<textarea name="reqMand">${lines(v.reqMand)}</textarea>`, 'um por linha')}${fld('Requisitos desejáveis', `<textarea name="reqDesir">${lines(v.reqDesir)}</textarea>`, 'um por linha')}</div></div></div>
   <div class="card"><h3>Critérios de aderência <span class="lockchip">${ico('lock', 12)} apoio interno</span></h3><p class="sm mut mb">Usados para calcular o indicador de aderência, que apoia o recrutador e nunca decide sozinho.</p><div class="fg">${fld('Experiência mínima (anos)', inp('minExp', v.minExp, { type: 'number', attrs: 'min="0" step="0.5"' }))}<label class="check" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="degree" ${v.degree ? 'checked' : ''}> Exige ensino superior</label>${fld('Idioma exigido', sel('langName', LANGS.filter(l => l !== 'Português'), v.lang && v.lang.name, 'Nenhum'))}${fld('Nível mínimo', sel('langLevel', LVL, v.lang ? v.lang.level : 'Intermediário'))}</div><div class="mt">${chipsField('jskills', 'Competências-chave', v.skills, 'Enter para adicionar', 'dl-skills')}<datalist id="dl-skills">${ALL_SKILLS.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div></div>
   <div class="card"><h3>Perguntas de triagem</h3><p class="sm mut mb">Perguntas marcadas como eliminatórias sinalizam candidatos que não atendem ao requisito. A decisão final continua com o recrutador.</p><div id="g-sq">${(v.screening.length ? v.screening : []).map(sqRow).join('')}</div><button type="button" class="btn sm" data-act="addRow" data-g="sq">${ico('plus', 14)} Adicionar pergunta</button></div>
@@ -789,12 +1112,42 @@ function boardHtml(job) {
 }
 function pipeline(id) {
   const j = by('jobs', id); if (!j) return notFound(); const apps = jobApps(j.id), u = curUser();
-  return shell(`<p class="sm mb"><a href="#/s/vagas">← Vagas</a></p>${pageHead(esc(j.title), `${esc(compName(j.companyId))} — ${esc(j.city)}/${j.state} — ${j.mode} — ${jobStBadge(j.status)}`, `<a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar vaga</a><a class="btn sm" href="#/s/banco" data-act="tbForJob" data-id="${j.id}">${ico('users', 14)} Buscar no banco</a>${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>`}${j.status !== 'closed' ? `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>` : ''}`)}
+  return shell(`<p class="sm mb"><a href="#/s/vagas">← Vagas</a></p>${pageHead('Kanban — ' + esc(j.title), `${esc(compName(j.companyId))} — ${esc(j.city)}/${j.state} — ${j.mode} — ${jobStBadge(j.status)}`, `${j.status === 'open' ? `<button class="btn sm pri" data-act="shareJob" data-id="${j.id}">${ico('link', 14)} Divulgar vaga</button>` : ''}<a class="btn sm" href="${jobUrl(j.id)}" target="_blank" rel="noopener">Ver página pública</a><a class="btn sm" href="#/s/relatorios/ver?jobs=${j.id}">${ico('file', 14)} Relatório da vaga</a><a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar vaga</a><a class="btn sm" href="#/s/banco" data-act="tbForJob" data-id="${j.id}">${ico('users', 14)} Buscar no banco</a>${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>`}${j.status !== 'closed' ? `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>` : ''}`)}
+  <div class="flex gap wrap mb"><div class="grow" style="max-width:340px"><input type="search" placeholder="Filtrar candidatos nesta vaga" data-live="boardq" value="${esc(ui.boardq)}" aria-label="Filtrar candidatos"></div><span class="mut sm">${apps.length} candidaturas. Arraste os cartões entre as etapas ou use os botões. O percentual é apenas apoio, nunca uma decisão.</span></div>
+  <div id="board">${boardHtml(j)}</div>`);
+}
+
+/* ---------- Kanban pelo menu: escolhe a vaga e mostra o quadro ---------- */
+function kanbanHub() {
+  const rank = { open: 0, paused: 1, closed: 2 };
+  const jobs = db.jobs.filter(j => j.status !== 'draft').sort((a, b) => (rank[a.status] - rank[b.status]) || (jobApps(b.id).length - jobApps(a.id).length));
+  if (!jobs.length) return shell(`${pageHead('Kanban', 'Acompanhe os candidatos de cada vaga por etapa.')}<div class="empty"><b>Ainda não há vagas publicadas.</b><p class="mt-s"><a class="btn pri" href="#/s/vaga/nova">Criar vaga</a></p></div>`);
+  const j = jobs.find(x => x.id === ui.kjob) || jobs[0]; ui.kjob = j.id; const apps = jobApps(j.id);
+  return shell(`${pageHead('Kanban', 'Escolha uma vaga para ver os candidatos em cada etapa.')}
+  <div class="flex gap wrap mb" style="align-items:flex-end"><label class="field grow" style="max-width:480px"><span>Vaga</span><select data-act="aiSel" data-k="kjob" aria-label="Escolher vaga">${jobs.map(x => `<option value="${x.id}" ${x.id === j.id ? 'selected' : ''}>${esc(x.title)} — ${esc(compName(x.companyId))} (${jobApps(x.id).length})${x.status === 'open' ? '' : x.status === 'paused' ? ' — pausada' : ' — encerrada'}</option>`).join('')}</select></label><a class="btn sm" href="#/s/vaga/${j.id}">Abrir página da vaga</a></div>
   <div class="flex gap wrap mb"><div class="grow" style="max-width:340px"><input type="search" placeholder="Filtrar candidatos nesta vaga" data-live="boardq" value="${esc(ui.boardq)}" aria-label="Filtrar candidatos"></div><span class="mut sm">${apps.length} candidaturas. Arraste os cartões entre as etapas ou use os botões. O percentual é apenas apoio, nunca uma decisão.</span></div>
   <div id="board">${boardHtml(j)}</div>`);
 }
 
 /* ---------- Triagem ---------- */
+/* ---------- Triagem: vaga e cidade digitáveis ---------- */
+function triJobLabels() {
+  const jobs = db.jobs.filter(j => j.status !== 'draft'), base = j => j.title + ' — ' + compName(j.companyId), cnt = {};
+  jobs.forEach(j => { cnt[base(j)] = (cnt[base(j)] || 0) + 1; });
+  return jobs.map(j => ({ j, label: base(j) + (cnt[base(j)] > 1 ? ` · ${j.city}/${j.state}` : '') + (j.status === 'closed' ? ' (encerrada)' : j.status === 'paused' ? ' (pausada)' : '') }));
+}
+function triJobMatch(v) {
+  const q = strip(v).trim(), all = triJobLabels(); if (!q) return { m: [], n: 0 };
+  let m = all.filter(x => strip(x.label) === q); if (m.length === 1) return { m, n: 1 };
+  const terms = q.split(/\s+/); m = all.filter(x => terms.every(t => strip(x.label).includes(t)));
+  return { m: m.length === 1 ? m : [], n: m.length };
+}
+function triJobHint(v) {
+  const cur = triJobLabels().find(x => x.j.id === ui.tri.job), r = triJobMatch(v);
+  if (!String(v || '').trim()) return '';
+  if (r.m.length) return `<span style="color:var(--green)">✓ Vaga selecionada</span>`;
+  return r.n ? `${r.n} vagas combinam. Escolha uma da lista; os resultados continuam em: ${esc(cur ? cur.label : '—')}` : `Nenhuma vaga encontrada. Os resultados continuam em: ${esc(cur ? cur.label : '—')}`;
+}
 function triRows() {
   const f = ui.tri, job = by('jobs', f.job); if (!job) return '<div class="empty">Escolha uma vaga para começar a triagem.</div>';
   let rows = jobApps(job.id).filter(a => (!f.stage || a.stage === f.stage)).map(a => ({ a, c: by('cands', a.candId) })).filter(r => matchCand(r.c, f));
@@ -809,7 +1162,7 @@ function triagem() {
   const f = ui.tri, jobs = db.jobs.filter(j => j.status !== 'draft'); if (!f.job) f.job = (jobs.find(j => j.status === 'open') || jobs[0]).id;
   const L = (n, label, inner) => `<label class="field"><span>${label}</span>${inner}</label>`;
   return shell(`${pageHead('Triagem', 'Filtre as candidaturas de uma vaga por critérios objetivos e avance ou reprove em lote.', `<button class="btn sm" data-act="preset" data-w="tri-brief">Aplicar exemplo do briefing</button><button class="btn sm ghost" data-act="clearTri">Limpar</button>`)}
-  <div class="card mb"><div class="filters">${L('job', 'Vaga', sel('job', jobs.map(j => [j.id, j.title + ' — ' + compName(j.companyId)]), f.job, null, 'data-live="tri"'))}${L('stage', 'Etapa', sel('stage', STAGES.map(s => [s.id, s.name]), f.stage, 'Todas', 'data-live="tri"'))}${L('city', 'Cidade', sel('city', uniq(db.cands.map(c => c.city)).sort(), f.city, 'Todas', 'data-live="tri"'))}${L('minExp', 'Experiência mínima (anos)', `<input name="minExp" type="number" min="0" step="0.5" data-live="tri" value="${esc(f.minExp || '')}">`)}${L('maxSal', 'Pretensão até (R$)', `<input name="maxSal" type="number" min="0" step="100" data-live="tri" value="${esc(f.maxSal || '')}">`)}${L('lang', 'Idioma', sel('lang', LANGS, f.lang, 'Qualquer', 'data-live="tri"'))}${L('langLevel', 'Nível mínimo', sel('langLevel', LVL.map((l, i) => [i, l]), f.langLevel, 'Qualquer', 'data-live="tri"'))}${L('avail', 'Início em até', sel('avail', AVAIL.map((l, i) => [i, l]), f.avail, 'Qualquer', 'data-live="tri"'))}${L('edu', 'Formação mínima', sel('edu', EDU.map((l, i) => [i, l]), f.edu, 'Qualquer', 'data-live="tri"'))}${L('skill', 'Competência', `<input name="skill" list="dl-skills" data-live="tri" value="${esc(f.skill || '')}">`)}</div>
+  <div class="card mb"><div class="filters">${L('job', 'Vaga', `<input name="jobq" type="search" list="dl-trijobs" data-live="tri" autocomplete="off" placeholder="Digite o nome da vaga ou do cliente" aria-label="Vaga" value="${esc(f.jobq !== undefined ? f.jobq : ((triJobLabels().find(x => x.j.id === f.job) || {}).label || ''))}"><datalist id="dl-trijobs">${triJobLabels().map(x => `<option value="${esc(x.label)}">`).join('')}</datalist><span class="xs mut" id="tri-jobhint">${triJobHint(f.jobq !== undefined ? f.jobq : '')}</span>`)}${L('stage', 'Etapa', sel('stage', STAGES.map(s => [s.id, s.name]), f.stage, 'Todas', 'data-live="tri"'))}${L('cityq', 'Cidade', `<input name="cityq" type="search" list="dl-tricities" data-live="tri" autocomplete="off" placeholder="Digite a cidade (vazio = todas)" aria-label="Cidade" value="${esc(f.cityq || '')}"><datalist id="dl-tricities">${uniq(db.cands.map(c => c.city).filter(Boolean)).sort((a, b) => a.localeCompare(b, 'pt')).map(c => `<option value="${esc(c)}">`).join('')}</datalist>`)}${L('minExp', 'Experiência mínima (anos)', `<input name="minExp" type="number" min="0" step="0.5" data-live="tri" value="${esc(f.minExp || '')}">`)}${L('maxSal', 'Pretensão até (R$)', `<input name="maxSal" type="number" min="0" step="100" data-live="tri" value="${esc(f.maxSal || '')}">`)}${L('lang', 'Idioma', sel('lang', LANGS, f.lang, 'Qualquer', 'data-live="tri"'))}${L('langLevel', 'Nível mínimo', sel('langLevel', LVL.map((l, i) => [i, l]), f.langLevel, 'Qualquer', 'data-live="tri"'))}${L('avail', 'Início em até', sel('avail', AVAIL.map((l, i) => [i, l]), f.avail, 'Qualquer', 'data-live="tri"'))}${L('edu', 'Formação mínima', sel('edu', EDU.map((l, i) => [i, l]), f.edu, 'Qualquer', 'data-live="tri"'))}${L('skill', 'Competência', `<input name="skill" list="dl-skills" data-live="tri" value="${esc(f.skill || '')}">`)}</div>
   <label class="check mt"><input type="checkbox" name="ko" data-live="tri" ${f.ko ? 'checked' : ''}> Mostrar só quem atende todas as perguntas eliminatórias</label><datalist id="dl-skills">${ALL_SKILLS.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
   <div id="tri-res">${triRows()}</div>`);
 }
@@ -825,6 +1178,7 @@ function matchCand(c, f) {
   const hay = strip([c.name, c.title, c.area, c.city, c.state, c.skills.join(' '), (c.tags || []).join(' '), c.exps.map(e => e.role).join(' ')].join(' '));
   if (!p.terms.every(t => hay.includes(t))) return false;
   if (p.minExp && yrs < p.minExp) return false;
+  if (f.cityq && !strip(c.city).includes(strip(f.cityq).trim())) return false;
   if (f.city && c.city !== f.city) return false; if (f.area && c.area !== f.area) return false;
   if (f.title && !strip(c.title + ' ' + c.exps.map(e => e.role).join(' ')).includes(strip(f.title))) return false;
   if (f.minExp && yrs < +f.minExp) return false;
@@ -897,15 +1251,84 @@ function staffCand(cid, aid) {
 }
 
 /* ---------- Admin: empresas, usuários, solicitações, comunicações, IA, LGPD ---------- */
-function companies() {
-  return shell(`${pageHead('Empresas clientes', 'Cadastre empresas e crie o acesso do contato responsável.', `<button class="btn pri" data-act="companyMenu">${ico('plus', 16)} Nova empresa</button>`)}
-  <div class="tw"><table><thead><tr><th>Empresa</th><th>Setor</th><th>Cidade</th><th>Contato / acesso</th><th>Vagas</th><th></th></tr></thead><tbody>${db.companies.map(c => `<tr><td class="b">${esc(c.name)}</td><td>${esc(c.sector)}</td><td>${esc(c.city)}/${c.state}</td><td>${esc(c.contact)}<div class="xs mut mono">${esc(c.email)}</div></td><td>${db.jobs.filter(j => j.companyId === c.id).length}</td><td style="text-align:right"><a class="btn sm" href="#/s/vaga/nova?co=${c.id}">Nova vaga</a></td></tr>`).join('')}</tbody></table></div>`);
+/* ---------- Documentos (CPF/CNPJ), telefone e edição de cadastros ---------- */
+const digits = s => String(s || '').replace(/\D/g, '');
+const maskTo = (v, pat) => { v = digits(v); let o = '', i = 0; for (const ch of pat) { if (i >= v.length) break; o += ch === '#' ? v[i++] : ch; } return o; };
+const fmtCNPJ = v => maskTo(v, '##.###.###/####-##');
+const fmtDoc = v => digits(v).length > 11 ? fmtCNPJ(v) : maskTo(v, '###.###.###-##');
+const fmtPhone = v => maskTo(String(v || '').slice(0, 15), digits(v).length > 10 ? '(##) #####-####' : '(##) ####-####');
+const docShow = d => !d ? '—' : d.length === 11 ? `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**` : fmtCNPJ(d);
+const validCPF = v => { v = digits(v); if (v.length !== 11 || /^(\d)\1+$/.test(v)) return false; const dv = n => { let s = 0; for (let i = 0; i < n; i++) s += +v[i] * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; }; return dv(9) === +v[9] && dv(10) === +v[10]; };
+const validCNPJ = v => { v = digits(v); if (v.length !== 14 || /^(\d)\1+$/.test(v)) return false; const dv = n => { const w = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]; let s = 0; for (let i = 0; i < n; i++) s += +v[i] * w[i]; const r = s % 11; return r < 2 ? 0 : 11 - r; }; return dv(12) === +v[12] && dv(13) === +v[13]; };
+function docOf(raw, only) {
+  const d = digits(raw); if (!d) return { d: '' };
+  if (only === 'cnpj') return validCNPJ(d) ? { d } : { err: 'CNPJ inválido. Confira os 14 números.' };
+  if (d.length === 11) return validCPF(d) ? { d } : { err: 'CPF inválido. Confira os números.' };
+  if (d.length === 14) return validCNPJ(d) ? { d } : { err: 'CNPJ inválido. Confira os números.' };
+  return { err: 'Digite um CPF (11 números) ou um CNPJ (14 números).' };
 }
-const PERMS = [['Ver painel e vagas', 1, 1, 1, 0], ['Criar/editar/publicar vagas', 1, 1, 0, 0], ['Pipeline e triagem', 1, 1, 0, 0], ['Banco de talentos completo', 1, 1, 0, 0], ['Avaliações e anotações internas', 1, 1, 0, 0], ['Ver candidatos encaminhados e decidir', 1, 0, 1, 0], ['Solicitar abertura de vaga', 1, 0, 1, 0], ['Empresas, usuários e LGPD', 1, 0, 0, 0], ['Editar próprio perfil e candidaturas', 0, 0, 0, 1]];
+const phoneOf = raw => { const d = digits(raw); return !d || (d.length >= 10 && d.length <= 11) ? { d } : { err: 'Telefone inválido. Use DDD + número.' }; };
+const userPhone = u => u.phone || (u.companyId ? (by('companies', u.companyId) || {}).phone : '') || '';
+const PH_ATTR = 'data-mask="phone" inputmode="tel" maxlength="15" autocomplete="off" placeholder="(81) 99999-0000"';
+const companyFields = c => `${fld('Nome da empresa', inp('name', c.name, { req: 1 }))}${fld('CNPJ', inp('cnpj', fmtCNPJ(c.cnpj), { req: 1, attrs: 'data-mask="cnpj" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="00.000.000/0000-00"' }), 'identificador único')}${fld('Setor', inp('sector', c.sector, { req: 1 }))}${fld('Cidade', inp('city', c.city, { req: 1 }))}${fld('Estado', sel('state', UF, c.state || 'PE'))}${fld('Nome do Responsável', inp('contact', c.contact, { req: 1 }))}${fld('Telefone de contato', inp('phone', fmtPhone(c.phone), { attrs: PH_ATTR }))}${fld('E-mail de acesso', inp('email', c.email, { type: 'email', req: 1 }))}`;
+const passField = hint => fld('Nova senha', inp('pass', '', { type: 'password', attrs: 'minlength="6" autocomplete="new-password" placeholder="Deixe em branco para manter a atual"' }), hint);
+
+/* ---------- Catálogo de cargos (gerenciado pelo administrador) ---------- */
+const CARGOS_EXTRA = {"Recursos Humanos": ["Auxiliar de Departamento Pessoal", "Analista de Departamento Pessoal", "Analista de Treinamento e Desenvolvimento", "Analista de Cargos e Salários", "Analista de Benefícios", "Técnico de Segurança do Trabalho", "Coordenador de RH", "Gerente de RH", "Recrutador(a)", "Estagiário(a) de RH"], "Comercial": ["Representante Comercial", "Consultor de Vendas", "Vendedor Externo", "Supervisor de Vendas", "Gerente de Contas (Key Account)", "SDR / Pré-vendas", "Analista de Inside Sales", "Assistente Comercial", "Promotor de Vendas", "Gerente Regional de Vendas", "Executivo de Contas"], "Administrativo": ["Secretária(o) Executiva(o)", "Auxiliar de Escritório", "Assistente de Compras", "Analista de Compras", "Comprador(a)", "Coordenador Administrativo", "Gerente Administrativo", "Analista de Facilities", "Assistente Jurídico", "Estagiário(a) Administrativo"], "Tecnologia": ["Desenvolvedor Front-end", "Desenvolvedor Back-end", "Desenvolvedor Mobile", "Analista de Sistemas", "Analista de Infraestrutura", "Engenheiro de Dados", "Cientista de Dados", "Engenheiro DevOps", "Analista de Segurança da Informação", "Product Owner", "Scrum Master", "UX/UI Designer", "Técnico de Suporte", "Arquiteto de Software", "Tech Lead", "Gerente de TI"], "Financeiro": ["Contador(a)", "Auxiliar Contábil", "Auxiliar Financeiro", "Analista de Controladoria", "Analista de Contas a Pagar", "Analista de Contas a Receber", "Analista Fiscal", "Analista de Crédito e Cobrança", "Tesoureiro(a)", "Coordenador Financeiro", "Gerente Financeiro"], "Logística": ["Auxiliar de Logística", "Auxiliar de Almoxarifado", "Almoxarife", "Conferente", "Operador de Empilhadeira", "Motorista", "Analista de PCP", "Analista de Supply Chain", "Líder de Expedição", "Coordenador de Logística", "Gerente de Logística"], "Marketing": ["Analista de Marketing Digital", "Analista de Performance (Tráfego Pago)", "Analista de Conteúdo", "Analista de CRM", "Redator(a)", "Editor(a) de Vídeo", "Assessor(a) de Comunicação", "Assistente de Marketing", "Coordenador de Marketing", "Gerente de Marketing", "Estagiário(a) de Marketing"], "Atendimento": ["Atendente de Loja", "Atendente de Telemarketing", "Operador de Telemarketing", "Caixa", "Analista de Suporte ao Cliente", "Analista de Customer Success", "Supervisor de Atendimento", "Gerente de Atendimento", "Recepcionista de Clínica"]};
+function defaultCargos() {
+  const seen = new Set(), out = [];
+  Object.keys(AREAS).forEach(area => [...AREAS[area].titles, ...(CARGOS_EXTRA[area] || [])].forEach(n => { const k = strip(n); if (!seen.has(k)) { seen.add(k); out.push({ id: 'cg' + (out.length + 1), name: n, area }); } }));
+  return out;
+}
+const cargoDL = () => `<datalist id="dl-cargos">${(db.cargos || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'pt')).map(c => `<option value="${esc(c.name)}" label="${esc(c.area)}">`).join('')}</datalist>`;
+const CARGO_ATTR = 'list="dl-cargos" autocomplete="off"';
+const cargoUse = n => { const k = strip(n); return { j: db.jobs.filter(j => strip(j.title) === k).length, c: db.cands.filter(x => !x.deleted && strip(x.title) === k).length }; };
+function cargoMissing() {
+  const known = new Set(db.cargos.map(c => strip(c.name))), m = {};
+  const add = (t, a) => { t = String(t || '').trim(); if (!t || known.has(strip(t))) return; const e = m[strip(t)] = m[strip(t)] || { name: t, n: 0, areas: {} }; e.n++; if (a) e.areas[a] = (e.areas[a] || 0) + 1; };
+  db.jobs.forEach(j => add(j.title, j.area)); db.cands.filter(c => !c.deleted).forEach(c => add(c.title, c.area)); db.requests.forEach(r => add(r.title, r.area));
+  return Object.values(m).sort((a, b) => b.n - a.n).slice(0, 12).map(e => ({ ...e, area: Object.keys(e.areas).sort((a, b) => e.areas[b] - e.areas[a])[0] || AREA_LIST[0] }));
+}
+function cargosTable() {
+  const f = ui.cg || {}, q = strip(f.q || '');
+  const rows = db.cargos.filter(c => (!f.area || c.area === f.area) && (!q || strip(c.name).includes(q))).sort((a, b) => a.area.localeCompare(b.area, 'pt') || a.name.localeCompare(b.name, 'pt'));
+  return `<p class="sm mut mb">${rows.length} de ${db.cargos.length} cargos</p><div class="tw"><table><thead><tr><th>Cargo</th><th>Área</th><th>Em uso</th><th></th></tr></thead><tbody>${rows.map(c => { const u = cargoUse(c.name); return `<tr><td class="b">${esc(c.name)}</td><td>${esc(c.area)}</td><td class="xs mut">${u.j} ${u.j === 1 ? 'vaga' : 'vagas'} · ${u.c} ${u.c === 1 ? 'perfil' : 'perfis'}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="cargoEdit" data-id="${c.id}">Editar</button> <button class="btn sm danger" data-act="cargoDel" data-id="${c.id}">Excluir</button></td></tr>`; }).join('') || '<tr><td colspan="4" class="center mut" style="padding:24px">Nenhum cargo encontrado.</td></tr>'}</tbody></table></div>`;
+}
+function cargosView() {
+  ui.cg = ui.cg || {}; const miss = cargoMissing();
+  return shell(`${pageHead('Cargos', 'Crie e organize os cargos que aparecem como opção ao cadastrar vagas, perfis e solicitações.', `<button class="btn pri" data-act="cargoMenu">${ico('plus', 16)} Novo cargo</button>`)}
+  ${miss.length ? `<div class="card mb"><h3>Cargos digitados que ainda não estão na lista</h3><p class="sm mut mb">Apareceram em vagas, perfis ou solicitações. Adicione os que fazem sentido para padronizar as próximas opções.</p><div class="flex wrap" style="gap:6px">${miss.map(m => `<button type="button" class="chip" data-act="cargoAdd" data-n="${esc(m.name)}" data-a="${esc(m.area)}" style="cursor:pointer">${ico('plus', 12)} ${esc(m.name)} <span class="xs mut">(${m.n})</span></button>`).join('')}</div></div>` : ''}
+  <div class="flex gap wrap mb" style="align-items:flex-end"><label class="field grow" style="max-width:360px"><span>Buscar cargo</span><input type="search" name="q" data-live="cg" value="${esc(ui.cg.q || '')}" placeholder="Ex.: analista" autocomplete="off"></label><label class="field" style="min-width:200px"><span>Área</span>${sel('area', AREA_LIST, ui.cg.area || '', 'Todas as áreas', 'data-live="cg"')}</label></div>
+  <div id="cargo-res">${cargosTable()}</div>
+  <p class="xs mut mt">Editar ou excluir um cargo muda apenas a lista de opções. Vagas, perfis e solicitações já cadastrados não são alterados. Quem preenche ainda pode digitar um cargo que não esteja na lista.</p>`);
+}
+function cargoModal(c) {
+  openModal(c ? 'Editar cargo' : 'Novo cargo', `<form data-form="cargo" data-id="${c ? c.id : ''}" class="stack"><div class="fg">${fld('Nome do cargo', inp('name', c ? c.name : '', { req: 1, attrs: 'maxlength="80" autocomplete="off"', ph: 'Ex.: Analista de Marketing Júnior' }))}${fld('Área', sel('area', AREA_LIST, c ? c.area : '', 'Selecione', 'required'))}</div><p class="xs mut">Cargos com o mesmo nome não são permitidos, mesmo com letras maiúsculas ou acentos diferentes.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">${c ? 'Salvar' : 'Criar cargo'}</button></div></form>`);
+}
+/* ---------- Busca em Empresas clientes e Usuários ---------- */
+const termsMatch = (q, fields, digitFields) => {
+  const terms = String(q || '').trim().split(/\s+/).filter(Boolean), hay = strip(fields.join(' ')), dg = digits(digitFields.join(' '));
+  return terms.every(t => /^[\d.\/\-]+$/.test(t) && digits(t).length >= 2 ? dg.includes(digits(t)) : hay.includes(strip(t)));
+};
+function companiesRes() {
+  const q = ui.coQ || '', list = db.companies.filter(c => termsMatch(q, [c.name, c.email, c.contact, c.sector, c.city], [c.cnpj]));
+  return `<p class="sm mut mb">${list.length} ${list.length === 1 ? 'empresa' : 'empresas'}${q.trim() ? ' encontradas' : ''}</p><div class="tw"><table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Setor</th><th>Cidade</th><th>Contato / acesso</th><th>Vagas</th><th></th></tr></thead><tbody>${list.map(c => `<tr><td class="b">${esc(c.name)}</td><td class="mono xs">${c.cnpj ? fmtCNPJ(c.cnpj) : '<span class="badge" style="--c:var(--sun)">Pendente</span>'}</td><td>${esc(c.sector)}</td><td>${esc(c.city)}/${c.state}</td><td>${esc(c.contact)}<div class="xs mut mono">${esc(c.email)}</div>${c.phone ? `<div class="xs mut">${fmtPhone(c.phone)}</div>` : ''}</td><td>${db.jobs.filter(j => j.companyId === c.id).length}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="rpOpenCo" data-id="${c.id}">Relatório</button> <button class="btn sm" data-act="companyEdit" data-id="${c.id}">Editar</button> <a class="btn sm" href="#/s/vaga/nova?co=${c.id}">Nova vaga</a></td></tr>`).join('') || '<tr><td colspan="8" class="center mut" style="padding:28px">Nenhuma empresa encontrada. Tente outro nome, e-mail ou CNPJ.</td></tr>'}</tbody></table></div>`;
+}
+function companies() {
+  return shell(`${pageHead('Empresas clientes', 'Cadastre empresas, edite os dados e o acesso do contato responsável. O CNPJ é o identificador único.', `<button class="btn pri" data-act="companyMenu">${ico('plus', 16)} Nova empresa</button>`)}
+  <div class="flex gap wrap mb" style="align-items:flex-end"><label class="field grow" style="max-width:480px"><span>Buscar empresa</span><input type="search" data-live="coq" value="${esc(ui.coQ || '')}" placeholder="Nome, e-mail ou CNPJ" autocomplete="off" aria-label="Buscar empresa por nome, e-mail ou CNPJ"></label></div>
+  <div id="co-res">${companiesRes()}</div>`);
+}
+const PERMS = [['Ver tela principal e vagas', 1, 1, 1, 0], ['Criar/editar/publicar vagas', 1, 1, 0, 0], ['Pipeline e triagem', 1, 1, 0, 0], ['Banco de talentos completo', 1, 1, 0, 0], ['Avaliações e anotações internas', 1, 1, 0, 0], ['Ver candidatos encaminhados e decidir', 1, 0, 1, 0], ['Solicitar abertura de vaga', 1, 0, 1, 0], ['Empresas, usuários e LGPD', 1, 0, 0, 0], ['Editar próprio perfil e candidaturas', 0, 0, 0, 1]];
+function usersRes() {
+  const q = ui.usQ || '', list = db.users.filter(u => u.role !== 'candidate' && termsMatch(q, [u.name, u.email, ROLE_NAME[u.role], u.companyId ? compName(u.companyId) : ''], [u.doc || '', u.companyId ? (by('companies', u.companyId) || {}).cnpj : '']));
+  return `<p class="sm mut mb">${list.length} ${list.length === 1 ? 'usuário' : 'usuários'}${q.trim() ? ' encontrados' : ''}</p><div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th><th>CPF/CNPJ</th><th>Perfil</th><th>Empresa</th><th>Status</th><th></th></tr></thead><tbody>${list.map(u => `<tr><td class="b">${esc(u.name)}</td><td class="mono">${esc(u.email)}</td><td class="xs">${userPhone(u) ? fmtPhone(userPhone(u)) : '—'}</td><td class="mono xs">${u.role === 'client' ? '—' : docShow(u.doc)}</td><td><span class="badge">${ROLE_NAME[u.role]}</span></td><td>${u.companyId ? esc(compName(u.companyId)) : '—'}</td><td>${u.active === false ? '<span class="badge" style="--c:var(--red)">Inativo</span>' : '<span class="badge" style="--c:var(--green)">Ativo</span>'}</td><td style="text-align:right;white-space:nowrap"><button class="btn sm" data-act="userEdit" data-id="${u.id}">Editar</button> ${u.id !== curUser().id ? `<button class="btn sm" data-act="toggleUser" data-id="${u.id}">${u.active === false ? 'Reativar' : 'Desativar'}</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="8" class="center mut" style="padding:28px">Nenhum usuário encontrado. Tente outro nome, e-mail ou CNPJ/CPF.</td></tr>'}</tbody></table></div>`;
+}
 function usersView() {
-  return shell(`${pageHead('Usuários e acessos', 'Cada perfil enxerga apenas o que precisa.', `<button class="btn pri" data-act="userMenu">${ico('plus', 16)} Novo usuário interno</button>`)}
+  return shell(`${pageHead('Usuários e acessos', 'Edite cadastros, redefina senhas e controle quem acessa. Cada perfil enxerga apenas o que precisa.', `<button class="btn pri" data-act="userMenu">${ico('plus', 16)} Novo usuário interno</button>`)}
   <div class="card mb"><h3>Matriz de permissões</h3><div class="tw" style="border:0"><table><thead><tr><th>Permissão</th><th>Admin</th><th>Recrutador</th><th>Empresa</th><th>Candidato</th></tr></thead><tbody>${PERMS.map(p => `<tr><td>${p[0]}</td>${p.slice(1).map(v => `<td>${v ? '<span style="color:var(--green)">✓</span>' : '<span class="mut">—</span>'}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>
-  <div class="tw"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Empresa</th><th>Status</th><th></th></tr></thead><tbody>${db.users.filter(u => u.role !== 'candidate').map(u => `<tr><td class="b">${esc(u.name)}</td><td class="mono">${esc(u.email)}</td><td><span class="badge">${ROLE_NAME[u.role]}</span></td><td>${u.companyId ? esc(compName(u.companyId)) : '—'}</td><td>${u.active === false ? '<span class="badge" style="--c:var(--red)">Inativo</span>' : '<span class="badge" style="--c:var(--green)">Ativo</span>'}</td><td style="text-align:right">${u.id !== curUser().id ? `<button class="btn sm" data-act="toggleUser" data-id="${u.id}">${u.active === false ? 'Reativar' : 'Desativar'}</button>` : ''}</td></tr>`).join('')}</tbody></table></div><p class="sm mut mt">${db.users.filter(u => u.role === 'candidate').length} contas de candidatos não são listadas aqui por privacidade.</p>`);
+  <div class="flex gap wrap mb" style="align-items:flex-end"><label class="field grow" style="max-width:480px"><span>Buscar usuário</span><input type="search" data-live="usq" value="${esc(ui.usQ || '')}" placeholder="Nome, e-mail ou CNPJ/CPF" autocomplete="off" aria-label="Buscar usuário por nome, e-mail ou CNPJ"></label></div>
+  <div id="us-res">${usersRes()}</div><p class="sm mut mt">${db.users.filter(u => u.role === 'candidate').length} contas de candidatos não são listadas aqui por privacidade.</p>`);
 }
 function requestsView() {
   return shell(`${pageHead('Solicitações de vaga', 'Pedidos enviados pelas empresas clientes.')}${db.requests.length ? db.requests.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map(r => `<div class="card mb"><div class="flex between gap wrap"><div><h3>${esc(r.title)}</h3><p class="mut sm">${esc(compName(r.companyId))} — ${esc(r.city || '')} — ${r.qty} ${r.qty > 1 ? 'posições' : 'posição'} — ${esc(r.mode || '')} — enviada ${ago(r.date)}</p></div><span class="badge dot" style="--c:${r.status === 'nova' ? 'var(--blue)' : 'var(--green)'}">${r.status === 'nova' ? 'Nova' : 'Convertida em vaga'}</span></div>${r.salary ? `<p class="sm mt-s">Faixa desejada: ${esc(r.salary)}</p>` : ''}<p class="sm mt-s">${esc(r.notes || '')}</p>${r.status === 'nova' ? `<a class="btn pri sm mt" href="#/s/vaga/nova?req=${r.id}">Criar vaga a partir desta solicitação</a>` : ''}</div>`).join('') : '<div class="empty">Nenhuma solicitação.</div>'}`);
@@ -916,10 +1339,61 @@ function commsView() {
   <div class="card mb"><h3>Integrações (camada mock, substituível)</h3><div class="tw" style="border:0"><table><thead><tr><th>Serviço</th><th>No MVP</th><th>Em produção</th></tr></thead><tbody>${INT.map(i => `<tr><td class="b">${i[0]}</td><td>${i[1]}</td><td class="mut">${i[2]}</td></tr>`).join('')}</tbody></table></div></div>
   <h3 class="mb">Caixa de saída (fictícia)</h3><div class="tw"><table><thead><tr><th>Canal</th><th>Para</th><th>Assunto</th><th>Quando</th></tr></thead><tbody>${db.outbox.slice(0, 40).map(m => `<tr><td><span class="badge">${m.channel === 'email' ? 'E-mail' : 'WhatsApp'}</span></td><td class="mono">${esc(m.to)}</td><td>${esc(m.subject)}<div class="xs mut">${esc(m.body).slice(0, 110)}</div></td><td class="xs">${fdt(m.date)}</td></tr>`).join('') || '<tr><td colspan="4" class="center mut" style="padding:24px">Nada enviado ainda.</td></tr>'}</tbody></table></div>`);
 }
+/* ---------- Assistente de recrutamento (chat de demonstração) ---------- */
+/* Responde só com dados deste sistema (banco de talentos + vagas), usando as mesmas regras de aderência da vaga. Produção: trocar por LLM no servidor, consultando o banco. */
+const AI_STOP = new Set(['de', 'da', 'do', 'das', 'dos', 'para', 'por', 'em', 'e', 'o', 'a', 'os', 'as', 'um', 'uma', 'vaga', 'vagas']);
+const AI_GENERIC = new Set(['analista', 'assistente', 'gerente', 'executivo', 'auxiliar']);
+const AI_SUGGEST = ['Selecione os 10 melhores candidatos para a vaga de Analista de Marketing Júnior', 'Top 5 para Analista de RH em Recife', 'Ranking dos melhores para Executivo Comercial com inglês', 'Os 8 melhores para Desenvolvedor Full Stack com disponibilidade imediata'];
+function aiAsk(q) {
+  const t = strip(q), words = t.replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const mm = t.match(/(\d{1,2})\s*(?:melhores|primeiros|candidat|perfis|talentos)/) || t.match(/top\s*(\d{1,2})/);
+  const n = Math.max(1, Math.min(20, mm ? +mm[1] : 10));
+  let job = null, best = 0;
+  db.jobs.filter(j => j.status !== 'draft').forEach(j => {
+    const tk = strip(j.title).split(/\s+/).filter(w => w.length > 1 && !AI_STOP.has(w)), hit = tk.filter(w => words.includes(w));
+    if (!hit.some(w => !AI_GENERIC.has(w))) return;
+    const s = hit.length / tk.length + (j.status === 'open' ? .01 : 0); if (s > best) { best = s; job = j; }
+  });
+  if (!job) return { role: 'b', text: 'Não identifiquei qual vaga você quer analisar. Cite o nome da vaga, por exemplo: "os 10 melhores para Analista de Marketing".', jobs: true };
+  const filters = []; let pool = db.cands.filter(c => !c.deleted);
+  if (/\b(junior|jr)\b/.test(t)) { pool = pool.filter(c => candYears(c) <= 3); filters.push('nível júnior (até 3 anos)'); }
+  else if (/\b(pleno|pl)\b/.test(t)) { pool = pool.filter(c => candYears(c) > 3 && candYears(c) <= 6); filters.push('nível pleno (3 a 6 anos)'); }
+  else if (/\b(senior|sr)\b/.test(t)) { pool = pool.filter(c => candYears(c) > 6); filters.push('nível sênior (mais de 6 anos)'); }
+  const city = [...new Set(pool.map(c => c.city).filter(Boolean))].find(x => t.includes(strip(x)));
+  if (city) { pool = pool.filter(c => c.city === city); filters.push('moram em ' + city); }
+  if (t.includes('ingles')) { pool = pool.filter(c => langLvl(c, 'Inglês') >= LVL.indexOf('Intermediário')); filters.push('inglês intermediário ou superior'); }
+  if (t.includes('imediata')) { pool = pool.filter(c => c.avail === 'Imediata'); filters.push('disponibilidade imediata'); }
+  const all = pool.map(c => ({ cid: c.id, ...AI.compare(c, job), y: candYears(c) })).sort((a, b) => b.score - a.score || b.y - a.y);
+  return { role: 'b', jobId: job.id, total: pool.length, filters, rows: all.slice(0, n), n };
+}
+function aiChatBot(m) {
+  if (!m.jobId) return `<p>${esc(m.text)}</p>${m.jobs ? `<div class="flex wrap" style="gap:6px;margin-top:8px">${db.jobs.filter(j => j.status === 'open').slice(0, 6).map(j => `<button type="button" class="chip" data-act="aiChip" data-q="Os 10 melhores para ${esc(j.title)}">${esc(j.title)}</button>`).join('')}</div>` : ''}`;
+  const j = by('jobs', m.jobId); if (!j) return '<p>Esta vaga não existe mais.</p>';
+  const flt = m.filters.length ? ` Filtros aplicados: ${m.filters.map(esc).join('; ')}.` : '';
+  if (!m.rows.length) return `<p>Nenhum perfil do banco atende a esses filtros para <b>${esc(j.title)}</b>.${flt} Tente retirar algum filtro.</p>`;
+  const short = m.rows.length < m.n ? ` Você pediu ${m.n}, mas só ${m.rows.length} ${m.rows.length === 1 ? 'perfil atende' : 'perfis atendem'} aos filtros.` : '';
+  return `<p>Aqui estão os <b>${m.rows.length} perfis mais aderentes</b> à vaga <b>${esc(j.title)}</b> — ${esc(compName(j.companyId))} (${j.city}/${j.state}), entre ${m.total} analisados no banco de talentos.${flt}${short}</p>
+  <div class="tw" style="margin-top:10px"><table><thead><tr><th>#</th><th>Candidato</th><th>Aderência</th><th>Pontos fortes</th><th>Atenção</th><th></th></tr></thead><tbody>${m.rows.map((r, i) => {
+    const c = by('cands', r.cid); if (!c || c.deleted) return '';
+    const ap = db.apps.some(a => a.candId === c.id && a.jobId === j.id), inv = db.invites.some(x => x.candId === c.id && x.jobId === j.id);
+    return `<tr><td class="b">${i + 1}</td><td><a class="b" href="#/s/candidato/${c.id}">${esc(c.name)}</a><div class="xs mut">${esc(c.title)} · ${esc(c.city)}/${c.state} · ${yTxt(candYears(c))}</div></td><td><span class="score">${r.score}%</span></td><td class="xs">${r.met.slice(0, 3).map(esc).join('<br>') || '—'}</td><td class="xs mut">${r.check.slice(0, 2).map(esc).join('<br>') || 'Nada relevante'}</td><td style="text-align:right;white-space:nowrap"><a class="btn sm" href="#/s/candidato/${c.id}">Perfil</a> ${ap ? '<span class="badge" style="--c:var(--green)">Já candidato(a)</span>' : inv ? '<span class="badge" style="--c:var(--sun)">Convidado(a)</span>' : `<button class="btn sm pri" data-act="inviteMenu" data-cid="${c.id}">Convidar</button>`}</td></tr>`;
+  }).join('')}</tbody></table></div>
+  <p class="xs mut" style="margin-top:8px">O percentual compara experiência, competências, formação, idioma, pretensão e localidade com os requisitos da vaga. É apoio à decisão: confira o perfil antes de convidar.</p>`;
+}
+function aiChatCard() {
+  const ch = ui.chat || [];
+  return `<div class="card mb chatc"><div class="flex between gap wrap"><h3>${ico('spark', 16)} Assistente de recrutamento</h3>${ch.length ? '<button class="btn sm" data-act="aiClear">Limpar conversa</button>' : ''}</div>
+  <p class="sm mut mb">Pergunte em linguagem natural. O assistente consulta apenas o banco de talentos e as vagas deste sistema, e nunca decide sozinho.</p>
+  <div class="chat" id="chatlog" aria-live="polite">${ch.length ? ch.map(m => m.role === 'u' ? `<div class="msg u">${esc(m.text)}</div>` : `<div class="msg b">${aiChatBot(m)}</div>`).join('') : `<div class="msg b"><p>Olá! Posso montar rankings de candidatos por vaga. Experimente uma destas perguntas:</p><div class="flex wrap" style="gap:6px;margin-top:8px">${AI_SUGGEST.map(s => `<button type="button" class="chip" data-act="aiChip" data-q="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`}</div>
+  <form data-form="aiChat" class="flex gap mt"><input name="q" class="grow" required autocomplete="off" maxlength="200" placeholder="Ex.: Selecione os 10 melhores candidatos para a vaga de Analista de Marketing Júnior" aria-label="Pergunta ao assistente"><button class="btn pri">${ico('spark', 14)} Perguntar</button></form></div>`;
+}
+const aiSend = q => { q = String(q || '').trim(); if (!q) return; (ui.chat = ui.chat || []).push({ role: 'u', text: q }, aiAsk(q)); ui.tb = ui.tb || {}; const last = ui.chat[ui.chat.length - 1]; if (last.jobId) ui.tb.job = last.jobId; render(true); const el = $('#chatlog'); if (el) el.scrollTop = el.scrollHeight; };
+
 function aiLab() {
   const r = ui.aiResult, cands = db.cands.filter(c => !c.deleted);
   const cid = ui.aiCand || cands[0].id, jid = ui.aiJob || 'j1', c = by('cands', cid), j = by('jobs', jid);
   return shell(`${pageHead('Análise com IA (demonstração)', 'Estrutura pronta para integrar um modelo de IA de verdade. Aqui, os resultados são simulados por regras.')}
+  ${aiChatCard()}
   <div class="g2"><div class="card"><h3>1. Analisar currículo</h3><p class="sm mut mb">Envie um PDF e veja quais dados seriam extraídos automaticamente.</p><form data-form="aiParse" class="stack"><input type="file" name="cv" accept=".pdf,.doc,.docx" required><button class="btn pri">${ico('spark', 14)} Analisar currículo</button></form>
   ${r ? `<div class="aibox mt"><b>${esc(r.file)}</b><div class="sm mt-s"><b>Cargo mais recente:</b> ${esc(r.title)}<br><b>Área:</b> ${esc(r.area)}<br><b>Tempo de experiência:</b> ${r.years} anos<br><b>Formação:</b> ${r.education.map(e => esc(e.level + ' em ' + e.course + ', ' + e.inst)).join('; ')}<br><b>Idiomas:</b> ${r.languages.map(l => esc(l.lang + ' (' + l.level + ')')).join(', ')}<br><b>Cargos anteriores:</b> ${r.exps.map(e => esc(e.role)).join('; ')}<br><b>Competências:</b> ${r.skills.map(esc).join(', ')}</div><p class="xs mut mt-s">Os dados extraídos sempre passam por confirmação do candidato ou do recrutador.</p></div>` : ''}</div>
   <div class="card"><h3>2. Comparar candidato com vaga</h3><div class="fg">${fld('Candidato', sel('c', cands.map(x => [x.id, x.name + ' — ' + x.title]), cid, null, 'data-act="aiSel" data-k="aiCand"'))}${fld('Vaga', sel('j', db.jobs.map(x => [x.id, x.title + ' — ' + compName(x.companyId)]), jid, null, 'data-act="aiSel" data-k="aiJob"'))}</div><div class="mt">${aiPanel(c, j)}</div></div></div>
@@ -955,7 +1429,7 @@ function clientJob(u, id) {
 }
 function clientRequest() {
   const u = curUser(), co = by('companies', u.companyId);
-  return shell(`${pageHead('Solicitar abertura de vaga', 'Conte o que você precisa; o recrutador responsável monta a vaga com você.')}<form class="card stack" data-form="request"><div class="fg">${fld('Cargo', inp('title', '', { req: 1, ph: 'Ex.: Gerente Comercial' }))}${fld('Área', sel('area', AREA_LIST, '', 'Selecione', 'required'))}${fld('Quantidade', inp('qty', 1, { type: 'number', req: 1, attrs: 'min="1"' }))}${fld('Cidade', inp('city', co.city, { req: 1 }))}${fld('Modalidade', sel('mode', MODES, 'Presencial'))}${fld('Faixa salarial', inp('salary', '', { ph: 'Ex.: R$ 4.000 a R$ 5.500' }))}</div>${fld('Descreva a necessidade', '<textarea name="notes" required placeholder="Responsabilidades, requisitos e prazo desejado"></textarea>')}<div><button class="btn pri">Enviar solicitação</button></div></form>`);
+  return shell(`${pageHead('Solicitar abertura de vaga', 'Conte o que você precisa; o recrutador responsável monta a vaga com você.')}<form class="card stack" data-form="request"><div class="fg">${fld('Cargo', inp('title', '', { req: 1, ph: 'Ex.: Gerente Comercial', attrs: CARGO_ATTR }) + cargoDL())}${fld('Área', sel('area', AREA_LIST, '', 'Selecione', 'required'))}${fld('Quantidade', inp('qty', 1, { type: 'number', req: 1, attrs: 'min="1"' }))}${fld('Cidade', inp('city', co.city, { req: 1 }))}${fld('Modalidade', sel('mode', MODES, 'Presencial'))}${fld('Faixa salarial', inp('salary', '', { ph: 'Ex.: R$ 4.000 a R$ 5.500' }))}</div>${fld('Descreva a necessidade', '<textarea name="notes" required placeholder="Responsabilidades, requisitos e prazo desejado"></textarea>')}<div><button class="btn pri">Enviar solicitação</button></div></form>`);
 }
 /* ---------- 7. Roteador ---------- */
 let rendering = false;
@@ -969,7 +1443,7 @@ function go(path) {
 }
 function route() {
   const { parts, query } = parse(), u = curUser(), [a, b, c] = parts;
-  if (a !== 'cadastro') ui.google = null;
+  if (a !== 'cadastro') { ui.google = null; ui.afterReg = null; } else if (query.next) ui.afterReg = query.next;
   const needLogin = () => { go('/entrar?next=' + encodeURIComponent('/' + parts.join('/'))); return ''; };
   if (!a) return landing();
   if (a === 'para-empresas') return bizPage();
@@ -994,10 +1468,11 @@ function route() {
     }
     case 's': {
       if (!u) return needLogin(); if (!isStaff(u)) return denied();
-      const adminOnly = ['empresas', 'usuarios', 'lgpd'];
+      const adminOnly = ['empresas', 'usuarios', 'cargos', 'lgpd'];
       if (adminOnly.includes(b) && u.role !== 'admin') return denied();
       switch (b) {
         case 'dashboard': return dashboard();
+        case 'indicadores': return indicadoresView(c);
         case 'vagas': return jobsAdmin();
         case 'vaga':
           if (c === 'nova') {
@@ -1006,11 +1481,14 @@ function route() {
             return jobForm(null, pre);
           }
           return parts[3] === 'editar' ? jobForm(c) : pipeline(c);
+        case 'kanban': return kanbanHub();
+        case 'relatorios': return c === 'ver' ? reportView(query) : reportsHub();
         case 'triagem': return triagem();
         case 'banco': return bank();
         case 'candidato': return staffCand(c, parts[3]);
         case 'empresas': return companies();
         case 'usuarios': return usersView();
+        case 'cargos': return cargosView();
         case 'solicitacoes': return requestsView();
         case 'comunicacoes': return commsView();
         case 'ia': return aiLab();
@@ -1068,12 +1546,14 @@ document.addEventListener('click', e => {
   go(c.dataset.href.slice(1));
 });
 
+const BASE_TITLE = document.title;
 function render(keep) {
-  const y = window.scrollY; let html; rendering = true;
+  const y = window.scrollY; let html; rendering = true; ui.pageTitle = null;
   try { html = route(); }
   catch (e) { console.error(e); html = pub(`<main class="wrapc narrow"><div class="empty"><b>Não foi possível carregar esta página.</b><p class="mt-s"><a href="#/">Voltar ao início</a></p></div></main>`); }
   rendering = false;
   if (html === '' || html == null) return;
+  document.title = ui.pageTitle || BASE_TITLE;
   $('#app').innerHTML = html;
   $$('[data-form]').forEach(f => { f.noValidate = true; });
   if ($('#wiz')) showStep(ui.step || 0);
@@ -1131,7 +1611,7 @@ function moveApp(id, stage) {
 function requestMove(id, stage) {
   const a = by('apps', id); if (!a || a.stage === stage) return;
   const job = by('jobs', a.jobId), c = by('cands', a.candId);
-  if (SIDE.includes(stage)) { confirmBox('Confirmar movimentação', `Mover <b>${esc(c.name)}</b> para <b>${ST[stage].name}</b> na vaga ${esc(job.title)}? O candidato será avisado e continua no banco de talentos.`, 'Confirmar', 'confirmMove', { app: id, stage }, true); return; }
+  if (SIDE.includes(stage)) { reasonModal(id, stage); return; }
   doMove(id, stage);
 }
 function doMove(id, stage) {
@@ -1154,6 +1634,8 @@ const actions = {
   },
   googlePick(t) { googleContinue(t.dataset.name, t.dataset.email, t.dataset.next); },
   googleCancel() { ui.google = null; render(true); },
+  shareJob(t) { const j = by('jobs', t.dataset.id); if (j) shareModal(j, false); },
+  copyFrom(t) { const el = t.dataset.src ? $(t.dataset.src) : null, val = t.dataset.val != null ? t.dataset.val : (el ? el.value : ''); copyText(val).then(ok => { if (ok) toast(t.dataset.msg || 'Copiado.'); else { if (el) { el.focus(); el.select(); } toast('Não foi possível copiar sozinho. Use Ctrl+C.', true); } }); },
   closeModal, closeSide() { ui.side = false; const a = $('.app'); if (a) a.classList.remove('open'); },
   openSide() { ui.side = true; const a = $('.app'); if (a) a.classList.add('open'); },
   logout() { Auth.logout(); ui.side = false; closeModal(); if (location.hash === '#/') render(); else go('/'); toast('Você saiu da conta.'); },
@@ -1179,7 +1661,7 @@ const actions = {
     openModal('Currículo', `<div class="card" style="background:var(--card2)"><div class="flex gap">${ico('file', 28)}<div><b>${esc(t.dataset.name)}</b><p class="sm mut">Pré-visualização simulada.</p></div></div></div><p class="sm mut mt">No MVP apenas os metadados do arquivo são guardados (nome, tamanho, data). Em produção, o PDF ficaria em armazenamento seguro com link temporário de acesso, disponível somente a quem tem permissão.</p>`);
   },
   jobStatus(t) {
-    const j = by('jobs', t.dataset.id), v = t.dataset.v; j.status = v; if (v === 'open' && !j.pubDate) j.pubDate = nowISO();
+    const j = by('jobs', t.dataset.id), v = t.dataset.v; j.status = v; if (v === 'open' && !j.pubDate) j.pubDate = nowISO(); if (v === 'closed') j.closedAt = nowISO(); else if (v === 'open') j.closedAt = null;
     audit('Vaga ' + ({ open: 'publicada', paused: 'pausada', closed: 'encerrada' }[v] || 'atualizada'), j.title); save(); render(true);
     toast({ open: 'Vaga publicada.', paused: 'Vaga pausada.', closed: 'Vaga encerrada.', draft: 'Vaga em rascunho.' }[v]);
   },
@@ -1223,7 +1705,7 @@ const actions = {
   clearTri() { ui.tri = { job: ui.tri.job, stage: 'novo' }; render(true); },
   preset(t) {
     if (t.dataset.w === 'tb-rh') { ui.tb = { limit: 18, q: 'Analista de RH + Recife + 2 anos', job: 'j1' }; }
-    else { ui.tri = { job: 'j1', stage: '', city: 'Recife', minExp: '2', ko: true, lang: 'Inglês', langLevel: '1' }; }
+    else { ui.tri = { job: 'j1', stage: '', cityq: 'Recife', minExp: '2', ko: true, lang: 'Inglês', langLevel: '1' }; }
     render(true);
   },
   inviteMenu(t) {
@@ -1232,6 +1714,8 @@ const actions = {
   },
   cmpJob(t) { ui.cmp[t.dataset.cid] = t.value; render(true); },
   aiSel(t) { ui[t.dataset.k] = t.value; render(true); },
+  aiChip(t) { aiSend(t.dataset.q); },
+  aiClear() { ui.chat = []; render(true); },
   contactMenu(t) {
     const c = by('cands', t.dataset.cid), ch = t.dataset.ch, em = ch === 'email';
     openModal(em ? 'Enviar e-mail' : 'Enviar WhatsApp', `<p class="sm mut mb">Para: ${esc(c.name)} — ${esc(em ? c.email : c.phone)}</p><form data-form="message" data-cid="${c.id}" data-ch="${ch}" class="stack">${em ? fld('Assunto', inp('subject', '', { req: 1 })) : ''}${fld('Mensagem', '<textarea name="body" required></textarea>')}<p class="xs mut">Envio simulado: a mensagem é registrada em Comunicações.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Enviar</button></div></form>`);
@@ -1248,11 +1732,50 @@ const actions = {
   },
   delTag(t) { const c = by('cands', t.dataset.cid); c.tags = (c.tags || []).filter(x => x !== t.dataset.t); save(); render(true); },
   companyMenu() {
-    openModal('Nova empresa cliente', `<form data-form="company" class="stack"><div class="fg">${fld('Nome da empresa', inp('name', '', { req: 1 }))}${fld('Setor', inp('sector', '', { req: 1 }))}${fld('Cidade', inp('city', '', { req: 1 }))}${fld('Estado', sel('state', UF, 'PE'))}${fld('Contato responsável', inp('contact', '', { req: 1 }))}${fld('E-mail de acesso', inp('email', '', { type: 'email', req: 1 }))}</div><p class="xs mut">Criamos um acesso de empresa cliente para o contato, com a senha de demonstração <span class="mono">demo123</span>.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar empresa e acesso</button></div></form>`);
+    openModal('Nova empresa cliente', `<form data-form="company" class="stack"><div class="fg">${companyFields({})}</div><p class="xs mut">Criamos um acesso de empresa cliente para o contato, com a senha de demonstração <span class="mono">demo123</span>.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar empresa e acesso</button></div></form>`);
   },
   userMenu() {
-    openModal('Novo usuário interno', `<form data-form="user" class="stack"><div class="fg">${fld('Nome', inp('name', '', { req: 1 }))}${fld('E-mail', inp('email', '', { type: 'email', req: 1 }))}${fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], 'recruiter'))}${fld('Senha inicial', inp('pass', 'demo123', { req: 1, attrs: 'minlength="6"' }))}</div><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar usuário</button></div></form>`);
+    openModal('Novo usuário interno', `<form data-form="user" class="stack"><div class="fg">${fld('Nome', inp('name', '', { req: 1 }))}${fld('E-mail', inp('email', '', { type: 'email', req: 1 }))}${fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], 'recruiter'))}${fld('CPF ou CNPJ', inp('doc', '', { attrs: 'data-mask="doc" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="CPF ou CNPJ"' }), 'obrigatório para recrutador')}${fld('Telefone', inp('phone', '', { attrs: PH_ATTR }))}${fld('Senha inicial', inp('pass', 'demo123', { req: 1, attrs: 'minlength="6"' }))}</div><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar usuário</button></div></form>`);
   },
+  companyEdit(t) {
+    const c = by('companies', t.dataset.id); if (!c) return;
+    openModal('Editar empresa cliente', `<form data-form="companyEdit" data-id="${c.id}" class="stack"><div class="fg">${companyFields(c)}${passField('opcional')}</div><p class="xs mut">O e-mail e o contato acima são os do acesso da empresa. Se o CNPJ já existir em outra empresa, o sistema não permite salvar. A senha atual nunca é exibida.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Salvar alterações</button></div></form>`);
+  },
+  userEdit(t) {
+    const u = by('users', t.dataset.id); if (!u) return; const me = u.id === curUser().id, cli = u.role === 'client';
+    openModal('Editar cadastro', `<form data-form="userEdit" data-id="${u.id}" class="stack"><div class="fg">${fld('Nome', inp('name', u.name, { req: 1 }))}${fld('E-mail de acesso', inp('email', u.email, { type: 'email', req: 1 }))}${fld('Telefone', inp('phone', fmtPhone(userPhone(u)), { attrs: PH_ATTR }))}${cli ? '' : fld('CPF ou CNPJ', inp('doc', fmtDoc(u.doc), { attrs: 'data-mask="doc" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="CPF ou CNPJ"' }), u.role === 'recruiter' ? 'obrigatório' : '')}${cli ? fld('Perfil', `<input value="Empresa cliente — ${esc(compName(u.companyId))}" disabled>`) : fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], u.role, null, me ? 'disabled' : ''))}${fld('Status', sel('status', [['on', 'Ativo'], ['off', 'Inativo']], u.active === false ? 'off' : 'on', null, me ? 'disabled' : ''))}${passField('opcional')}</div><p class="xs mut">${cli ? 'Cidade, CNPJ e demais dados da empresa são editados em <a href="#/s/empresas" data-act="closeModal">Empresas clientes</a>. ' : ''}${me ? 'Você não pode alterar o próprio perfil nem desativar o próprio acesso. ' : ''}A senha atual nunca é exibida; informe uma nova apenas se quiser redefinir.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Salvar alterações</button></div></form>`);
+  },
+  cargoMenu() { cargoModal(null); },
+  cargoEdit(t) { const c = (db.cargos || []).find(x => x.id === t.dataset.id); if (c) cargoModal(c); },
+  cargoAdd(t) {
+    const n = t.dataset.n; if (db.cargos.some(c => strip(c.name) === strip(n))) return;
+    db.cargos.push({ id: uid('cg'), name: n, area: t.dataset.a }); audit('Cargo criado', n); save(); render(true); toast('Cargo adicionado à lista.');
+  },
+  cargoDel(t) {
+    const c = db.cargos.find(x => x.id === t.dataset.id); if (!c) return; const u = cargoUse(c.name);
+    openModal('Excluir cargo', `<form data-form="cargoDel" data-id="${c.id}" class="stack"><p>Excluir <b>${esc(c.name)}</b> da lista de opções?</p><p class="sm mut">${u.j + u.c ? `Há ${u.j} ${u.j === 1 ? 'vaga' : 'vagas'} e ${u.c} ${u.c === 1 ? 'perfil' : 'perfis'} com este cargo. Eles continuam como estão; apenas deixa de ser sugerido.` : 'Nenhuma vaga ou perfil usa este cargo.'}</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn danger">Excluir cargo</button></div></form>`);
+  },
+  rpMode(t) { ui.rp = ui.rp || {}; ui.rp.mode = t.dataset.v; render(true); },
+  rpCo(t) { ui.rp.co = t.value; ui.rp.sel = []; render(true); },
+  rpSt(t) { ui.rp.st = t.value; render(true); },
+  rpToggle(t) { const s = ui.rp.sel; const i = s.indexOf(t.dataset.id); if (i < 0) s.push(t.dataset.id); else s.splice(i, 1); render(true); },
+  rpPick(t) { const v = t.dataset.v, js = db.jobs.filter(j => j.companyId === ui.rp.co && j.status !== 'draft'); ui.rp.sel = js.filter(j => v === 'all' || (v === 'live' && j.status !== 'closed') || (v === 'closed' && j.status === 'closed')).map(j => j.id); render(true); },
+  rpGo(t) { const rp = ui.rp; if (!rp.sel.length) return toast('Selecione ao menos uma vaga.', true); go('/s/relatorios/ver?co=' + rp.co + '&jobs=' + rp.sel.join(',')); },
+  rpOpenCo(t) { ui.rp = { mode: 'cliente', co: t.dataset.id, sel: [], q: '', st: 'all' }; go('/s/relatorios'); },
+  rptNames(t) { ui.rptNames = !!t.checked; refresh('#rpt-body', rptBody); },
+  rptPrint() { window.print(); },
+  rptCsv() {
+    const { list } = rptCur(), pfx = rptPrefix(list), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', names = !!ui.rptNames;
+    const rows = [['Vaga', 'Código', ...(names ? ['Candidato'] : []), 'Data da candidatura', 'Pretensão (R$)', 'Etapa atual', 'Motivo', 'Observação']];
+    list.forEach((s, i) => rptRows(s, pfx[i], names).forEach(r => rows.push([s.j.title, r.code, ...(names ? [r.name] : []), fdate(r.date), r.pret || '', r.stage, r.reason, r.note])));
+    const blob = new Blob(['﻿' + rows.map(r => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'relatorio-' + strip(list[0] ? list[0].j.title : 'vagas').replace(/[^a-z0-9]+/g, '-') + '.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  },
+  reasonEdit(t) { const a = by('apps', t.dataset.app); if (a) reasonModal(a.id, a.stage); },
+  nvSel(t) { ui.nv = ui.nv || {}; ui.nv.p = t.value; if (t.value === 'custom' && !ui.nv.from) { const d = new Date(); ui.nv.to = isoDay(d); ui.nv.from = isoDay(new Date(d.getTime() - 29 * 864e5)); } render(true); },
+  nvDate(t) { ui.nv = ui.nv || { p: 'custom' }; ui.nv[t.dataset.k] = t.value; if (ui.nv.from && ui.nv.to && ui.nv.from > ui.nv.to) { const x = ui.nv.from; ui.nv.from = ui.nv.to; ui.nv.to = x; } render(true); },
+  indToggle() { const inInd = location.hash.startsWith('#/s/indicadores'), open = ui.indOpen === false ? false : (ui.indOpen || inInd); if (open) { ui.indOpen = false; render(true); } else { ui.indOpen = true; if (inInd) render(true); else go('/s/indicadores/geral'); } },
+  indSel(t) { ui.ind = ui.ind || { p: '90d', co: '', rec: '' }; ui.ind[t.dataset.k] = t.value; render(true); },
   toggleUser(t) { const u = by('users', t.dataset.id); u.active = u.active === false; audit(u.active ? 'Usuário reativado' : 'Usuário desativado', u.email); save(); render(true); },
   execDelete(t) {
     const req = by('delReqs', t.dataset.id) || db.delReqs.find(r => r.id === t.dataset.id), id = req.candId, c = by('cands', id);
@@ -1317,7 +1840,8 @@ const forms = {
       db.cands.push(c); db.users.push(u); Sess.set(u.id); ui.google = null;
       notify(u.id, 'Bem-vindo(a) ao Vínculo! Seu perfil já está no banco de talentos.', '/c/perfil');
       db.users.filter(x => isStaff(x) && x.role === 'recruiter').forEach(x => notify(x.id, `Novo perfil no banco de talentos: ${c.name} (${c.area}).`, '/s/candidato/' + id));
-      save(); toast('Perfil criado! Agora você pode se candidatar às vagas.'); go('/vagas');
+      const dest = ui.afterReg && ui.afterReg.startsWith('/') && !ui.afterReg.startsWith('//') ? ui.afterReg : '/vagas'; ui.afterReg = null;
+      save(); toast('Perfil criado! Agora você pode se candidatar às vagas.'); go(dest);
     } else {
       const c = candOf(curUser()); Object.assign(c, data); if (file) c.resume = FileStore.put(file);
       curUser().name = c.name; save(); toast('Perfil atualizado.'); go('/c/perfil');
@@ -1338,9 +1862,9 @@ const forms = {
   job(f, e) {
     if (!validate(f)) return;
     const publish = !e.submitter || e.submitter.value === 'publish', fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), lines = k => g(k).split('\n').map(x => x.trim()).filter(Boolean);
-    const old = f.dataset.id ? by('jobs', f.dataset.id) : null, modeSel = $('select[name=mode]', f);
+    const old = f.dataset.id ? by('jobs', f.dataset.id) : null, modeSel = $('select[name=mode]', f), wasOpen = !!old && old.status === 'open';
     const screening = rowsOf(f, 'sq').filter(r => r.q).map(r => ({ id: ((old ? old.screening : []).find(o => o.q === r.q) || {}).id || uid('q'), q: r.q, type: r.type, expected: r.type === 'yn' ? r.expected : '', ko: !!r.ko && r.type === 'yn' }));
-    const j = old || { id: uid('j'), pubDate: null, status: 'draft' };
+    const j = old || { id: uid('j'), pubDate: null, status: 'draft', createdAt: nowISO() };
     Object.assign(j, {
       companyId: g('companyId'), title: g('title'), area: g('area'), recruiterId: g('recruiterId'), city: g('city'), state: g('state'), mode: modeSel.value, contract: g('contract'),
       salMin: +g('salMin') || 0, salMax: +g('salMax') || 0, qty: +g('qty') || 1, deadline: g('deadline'), desc: g('desc'), resp: lines('resp'), benefits: lines('benefits'),
@@ -1353,6 +1877,7 @@ const forms = {
     if (rq && rq.status === 'nova') { rq.status = 'atendida'; clientsOf(rq.companyId).forEach(cu => notify(cu.id, `Sua solicitação "${rq.title}" virou uma vaga${j.status === 'open' ? ' publicada' : ''}.`, '/e/vaga/' + j.id)); }
     audit(old ? 'Vaga editada' : 'Vaga criada', j.title); save();
     toast(j.status === 'open' ? (old ? 'Vaga atualizada.' : 'Vaga publicada!') : 'Rascunho salvo.'); go('/s/vaga/' + j.id);
+    if (j.status === 'open' && !wasOpen) setTimeout(() => shareModal(j, true), 60);
   },
   schedule(f) {
     if (!validate(f)) return;
@@ -1388,7 +1913,10 @@ const forms = {
     if (!validate(f)) return;
     const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), email = g('email').toLowerCase();
     if (db.users.some(x => x.email.toLowerCase() === email)) return toast('Este e-mail já está em uso.', true);
-    const co = { id: uid('co'), name: g('name'), sector: g('sector'), city: g('city'), state: g('state'), contact: g('contact'), email };
+    const dc = docOf(g('cnpj'), 'cnpj'); if (dc.err || !dc.d) return toast(dc.err || 'Informe o CNPJ da empresa.', true);
+    if (db.companies.some(x => x.cnpj === dc.d)) return toast('Já existe uma empresa cadastrada com este CNPJ.', true);
+    const ph = phoneOf(g('phone')); if (ph.err) return toast(ph.err, true);
+    const co = { id: uid('co'), name: g('name'), cnpj: dc.d, sector: g('sector'), city: g('city'), state: g('state'), contact: g('contact'), phone: ph.d, email };
     db.companies.push(co); db.users.push({ id: 'u_' + co.id, role: 'client', name: co.contact, email, pass: 'demo123', companyId: co.id, active: true });
     Mailer.send(email, 'Seu acesso ao Vínculo', `Olá, ${co.contact}. Seu acesso foi criado. Senha inicial: demo123`); audit('Empresa criada', co.name); save(); render(true);
     openModal('Empresa criada', `<div class="note mb">${ico('check', 14)} <b>${esc(co.name)}</b> foi cadastrada e o acesso da empresa cliente já existe.</div><div class="card" style="background:var(--card2)"><div class="xs mut">Login da empresa</div><div class="mono b">${esc(email)}</div><div class="xs mut mt-s">Senha inicial</div><div class="mono b">demo123</div></div><p class="sm mut mt">Para testar a visão da empresa, saia e entre com essas credenciais. Um e-mail com o acesso foi registrado em Comunicações.</p><div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Fechar</button><a class="btn pri" href="#/s/vaga/nova?co=${co.id}" data-act="closeModal">Criar vaga para esta empresa</a></div>`);
@@ -1397,7 +1925,70 @@ const forms = {
     if (!validate(f)) return;
     const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), email = g('email').toLowerCase();
     if (db.users.some(x => x.email.toLowerCase() === email)) return toast('Este e-mail já está em uso.', true);
-    db.users.push({ id: uid('u_'), role: g('role'), name: g('name'), email, pass: g('pass'), active: true }); audit('Usuário criado', email); save(); closeModal(); render(true); toast('Usuário criado.');
+    const dd = docOf(g('doc')); if (dd.err) return toast(dd.err, true);
+    if (g('role') === 'recruiter' && !dd.d) return toast('Informe o CPF ou CNPJ do recrutador.', true);
+    if (dd.d && db.users.some(x => x.doc === dd.d)) return toast('Já existe um usuário com este CPF/CNPJ.', true);
+    const ph = phoneOf(g('phone')); if (ph.err) return toast(ph.err, true);
+    db.users.push({ id: uid('u_'), role: g('role'), name: g('name'), email, doc: dd.d, phone: ph.d, pass: g('pass'), active: true }); audit('Usuário criado', email); save(); closeModal(); render(true); toast('Usuário criado.');
+  },
+  companyEdit(f) {
+    if (!validate(f)) return;
+    const co = by('companies', f.dataset.id); if (!co) return;
+    const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), email = g('email').toLowerCase(), acc = clientsOf(co.id)[0];
+    const dc = docOf(g('cnpj'), 'cnpj'); if (dc.err || !dc.d) return toast(dc.err || 'Informe o CNPJ da empresa.', true);
+    if (db.companies.some(x => x.cnpj === dc.d && x.id !== co.id)) return toast('Já existe outra empresa cadastrada com este CNPJ.', true);
+    const ph = phoneOf(g('phone')); if (ph.err) return toast(ph.err, true);
+    if (db.users.some(x => x !== acc && x.email.toLowerCase() === email)) return toast('Este e-mail já está em uso.', true);
+    const ch = [], set = (k, v, label) => { if ((co[k] || '') !== v) { co[k] = v; ch.push(label); } };
+    set('name', g('name'), 'nome'); set('cnpj', dc.d, 'CNPJ'); set('sector', g('sector'), 'setor'); set('city', g('city'), 'cidade'); set('state', g('state'), 'estado'); set('contact', g('contact'), 'contato'); set('phone', ph.d, 'telefone'); set('email', email, 'e-mail');
+    const pass = g('pass'), mailChg = ch.includes('e-mail');
+    if (acc) { acc.name = co.contact; acc.email = email; if (pass) { acc.pass = pass; ch.push('senha'); } }
+    if (!ch.length) { closeModal(); return toast('Nenhuma alteração foi feita.'); }
+    if (pass || mailChg) Mailer.send(email, 'Seus dados de acesso foram alterados', 'Um administrador atualizou os dados de acesso da sua empresa no Vínculo. Se você não esperava esta alteração, fale com a equipe.');
+    audit('Empresa editada (' + ch.join(', ') + ')', co.name); save(); closeModal(); render(true); toast('Cadastro da empresa atualizado.');
+  },
+  userEdit(f) {
+    if (!validate(f)) return;
+    const u = by('users', f.dataset.id); if (!u) return; const me = u.id === curUser().id, cli = u.role === 'client';
+    const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), email = g('email').toLowerCase();
+    if (db.users.some(x => x.id !== u.id && x.email.toLowerCase() === email)) return toast('Este e-mail já está em uso.', true);
+    const ph = phoneOf(g('phone')); if (ph.err) return toast(ph.err, true);
+    let doc = u.doc || ''; const role = cli || me ? u.role : (g('role') || u.role), active = me ? true : g('status') !== 'off';
+    if (!cli) {
+      const dd = docOf(g('doc')); if (dd.err) return toast(dd.err, true); doc = dd.d;
+      if (role === 'recruiter' && !doc) return toast('Informe o CPF ou CNPJ do recrutador.', true);
+      if (doc && db.users.some(x => x.id !== u.id && x.doc === doc)) return toast('Já existe um usuário com este CPF/CNPJ.', true);
+    }
+    if (u.role === 'admin' && (role !== 'admin' || !active) && !db.users.some(x => x.id !== u.id && x.role === 'admin' && x.active !== false)) return toast('É preciso manter ao menos um administrador ativo.', true);
+    const ch = [], set = (k, v, label) => { if ((u[k] || '') !== v) { u[k] = v; ch.push(label); } };
+    set('name', g('name'), 'nome'); set('email', email, 'e-mail'); set('phone', ph.d, 'telefone'); if (!cli) set('doc', doc, 'CPF/CNPJ');
+    if (u.role !== role) { u.role = role; ch.push('perfil'); }
+    if ((u.active !== false) !== active) { u.active = active; ch.push(active ? 'reativado' : 'desativado'); }
+    const pass = g('pass'); if (pass) { u.pass = pass; ch.push('senha'); }
+    if (!ch.length) { closeModal(); return toast('Nenhuma alteração foi feita.'); }
+    const co = cli ? by('companies', u.companyId) : null; if (co) { co.contact = u.name; co.email = u.email; if (ph.d) co.phone = ph.d; }
+    if (pass || ch.includes('e-mail')) Mailer.send(email, 'Seus dados de acesso foram alterados', 'Um administrador atualizou seus dados de acesso ao Vínculo. Se você não esperava esta alteração, fale com a equipe.');
+    audit('Cadastro editado (' + ch.join(', ') + ')', u.email); save(); closeModal(); render(true); toast('Cadastro atualizado.');
+  },
+  cargo(f) {
+    if (!validate(f)) return;
+    const fd = new FormData(f), name = String(fd.get('name') || '').replace(/\s+/g, ' ').trim(), area = String(fd.get('area') || ''), id = f.dataset.id;
+    if (name.length < 2) return toast('Digite o nome do cargo.', true);
+    if (db.cargos.some(c => c.id !== id && strip(c.name) === strip(name))) return toast('Este cargo já existe na lista.', true);
+    if (id) { const c = db.cargos.find(x => x.id === id); if (!c) return; const old = c.name; c.name = name; c.area = area; audit('Cargo editado', old === name ? name : old + ' → ' + name); toast('Cargo atualizado.'); }
+    else { db.cargos.push({ id: uid('cg'), name, area }); audit('Cargo criado', name); toast('Cargo criado. Já aparece como opção.'); }
+    save(); closeModal(); render(true);
+  },
+  cargoDel(f) {
+    const i = db.cargos.findIndex(c => c.id === f.dataset.id); if (i < 0) return;
+    const [c] = db.cargos.splice(i, 1); audit('Cargo excluído', c.name); save(); closeModal(); render(true); toast('Cargo excluído da lista.');
+  },
+  moveReason(f) {
+    if (!validate(f)) return;
+    const a = by('apps', f.dataset.app), stage = f.dataset.stage, fd = new FormData(f); if (!a) return;
+    if (a.stage !== stage) moveApp(a.id, stage);
+    a.reason = String(fd.get('reason') || ''); a.reasonNote = String(fd.get('note') || '').trim(); const h = a.history[a.history.length - 1]; if (h && h.stage === stage) { h.reason = a.reason; h.note = a.reasonNote; }
+    audit('Motivo registrado', `${by('cands', a.candId).name}: ${a.reason}`); save(); closeModal(); render(true); toast('Motivo registrado.');
   },
   request(f) {
     if (!validate(f)) return;
@@ -1412,6 +2003,7 @@ const forms = {
   },
   hsearch(f) { ui.jobs = { q: String(new FormData(f).get('q') || '').trim() }; go('/vagas'); },
   gsearch(f) { ui.tb = { limit: 18, q: String(new FormData(f).get('q') || '').trim() }; go('/s/banco'); },
+  aiChat(f) { aiSend(new FormData(f).get('q')); },
   aiParse(f) {
     const file = $('input[name=cv]', f).files[0]; if (!file) return toast('Escolha um arquivo.', true);
     ui.aiResult = { file: file.name, ...AI.parseResume(file.name) }; render(true);
@@ -1438,10 +2030,22 @@ function onLive(e) {
   const val = t.type === 'checkbox' ? t.checked : t.value;
   if (k === 'jobs') { ui.jobs[t.name] = val; later('jobs', () => refresh('#jobs-res', jobsResults)); }
   else if (k === 'tb') { ui.tb[t.name] = val; ui.tb.limit = 18; later('tb', () => refresh('#tb-res', tbResults)); }
-  else if (k === 'tri') { ui.tri[t.name] = val; later('tri', () => refresh('#tri-res', triRows)); }
+  else if (k === 'tri') {
+    ui.tri[t.name] = val;
+    if (t.name === 'jobq') { const r = triJobMatch(val); if (r.m.length) ui.tri.job = r.m[0].j.id; refresh('#tri-jobhint', () => triJobHint(val)); }
+    later('tri', () => refresh('#tri-res', triRows));
+  }
+  else if (k === 'jobsq') { ui.jobsQ = val; later('jq', () => refresh('#ja-res', jobsAdminRes)); }
   else if (k === 'note') { const c = by('cands', t.dataset.cid); if (c) { c.notes = val; later('note', save, 400); } }
-  else if (k === 'boardq') { ui.boardq = val; later('bq', () => { const j = by('jobs', parse().parts[2]); if (j) refresh('#board', () => boardHtml(j)); }); }
+  else if (k === 'cg') { ui.cg = ui.cg || {}; ui.cg[t.name] = val; later('cg', () => refresh('#cargo-res', cargosTable)); }
+  else if (k === 'rpq') { ui.rp.q = val; later('rpq', () => { const rp = ui.rp, q = strip(rp.q || ''); refresh('#rp-res', () => rpJobsTable(db.jobs.filter(j => j.status !== 'draft' && (rp.st === 'all' || (rp.st === 'live' ? j.status !== 'closed' : j.status === 'closed')) && (!q || strip(j.title + ' ' + compName(j.companyId)).includes(q))))); }); }
+  else if (k === 'rptmkt') { const j = by('jobs', t.dataset.id); if (j) { j.marketRef = +val || 0; later('rptm', () => { save(); refresh('#rpt-body', rptBody); }, 500); } }
+  else if (k === 'rptnote') { const o = t.dataset.co ? by('companies', t.dataset.co) : by('jobs', t.dataset.id); if (o) { o.reportNote = val; later('rptn', () => { save(); refresh('#rpt-body', rptBody); }, 500); } }
+  else if (k === 'coq') { ui.coQ = val; later('coq', () => refresh('#co-res', companiesRes)); }
+  else if (k === 'usq') { ui.usQ = val; later('usq', () => refresh('#us-res', usersRes)); }
+  else if (k === 'boardq') { ui.boardq = val; later('bq', () => { const j = by('jobs', parse().parts[2] || ui.kjob); if (j) refresh('#board', () => boardHtml(j)); }); }
 }
+document.addEventListener('input', e => { const t = e.target, m = t && t.dataset && t.dataset.mask; if (m) t.value = m === 'cnpj' ? fmtCNPJ(t.value) : m === 'phone' ? fmtPhone(t.value) : fmtDoc(t.value); });
 document.addEventListener('input', onLive);
 document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.live && e.target.tagName === 'SELECT') onLive(e); });
 document.addEventListener('submit', e => {
@@ -1483,6 +2087,7 @@ try { if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEvent
 db = Persist.load();
 if (!db || !db.users || !db.jobs) { db = seedDB(); }
 ['invites', 'requests', 'delReqs', 'audit', 'outbox', 'evals', 'notifs'].forEach(k => { if (!db[k]) db[k] = []; });
+if (!db.cargos) db.cargos = defaultCargos();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
