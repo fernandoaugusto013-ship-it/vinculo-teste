@@ -485,7 +485,7 @@ body.inapp{
   --coral:#EE6A4C;--coral-soft:#FDE6DF;--link:#B33C17;
   --green:#1FA463;--green-soft:#DFF5E8;--red:#C23A26;--red-soft:#FBE4DE;--sun:#F4B73F;--sun-soft:#FCF1D3;--lilac:#8E7BD6;--lilac-soft:#EEEAFB;--blue:#3A6FD8;
   --shadow:0 1px 2px rgba(15,15,20,.04),0 12px 32px -16px rgba(15,15,20,.14);
-  --r:24px;--fd:'Outfit','Segoe UI',system-ui,sans-serif;
+  --r:24px;--fd:'Outfit','Segoe UI',system-ui,sans-serif;--fb:'Outfit','Segoe UI',system-ui,sans-serif;--grad:linear-gradient(135deg,#F9A07C,#EC5B33);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body.inapp{
   --bg:#0E0E10;--card:#17171A;--card2:#1F1F23;--ink:#F2F2F3;--mut:#A3A3AB;--line:#2A2A2E;
@@ -552,3 +552,67 @@ body.inapp .kcard{border-radius:18px;border-color:transparent;box-shadow:var(--s
 body.inapp .kcol{border-radius:20px}
 body.inapp .modal{border-radius:24px}
 body.inapp .toast{border-radius:99px}
+
+/* ===== DS3: menu com ícones coloridos, recolher/expandir, Tela Principal em cartões ===== */
+body.inapp{font-size:15.5px}
+body.inapp .side{overflow:visible;padding:0}
+body.inapp .side-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:18px 12px 8px;scrollbar-width:thin}
+body.inapp .side-foot{padding:6px 12px 14px}
+body.inapp .side .logo{padding:2px 8px 14px;font-size:23px;gap:8px}
+body.inapp .side .grp{padding:12px 14px 4px;font-size:11px}
+body.inapp .side a.nl,body.inapp .side button.nl{position:relative;gap:12px;padding:5px 12px 5px 6px;min-height:42px;border-radius:99px;font-size:15px;font-weight:500;transition:background .15s}
+body.inapp .side a.nl.sub{min-height:0;padding:7px 14px;font-size:14px}
+.ni{display:inline-grid;place-items:center;width:32px;height:32px;border-radius:11px;flex:none;color:var(--nc,var(--coral));background:color-mix(in srgb,var(--nc,var(--coral)) 15%,transparent);transition:transform .18s,background .15s}
+.ni[data-c=coral]{--nc:#E5573A}.ni[data-c=blue]{--nc:#3A6FD8}.ni[data-c=lilac]{--nc:#7A63D0}.ni[data-c=green]{--nc:#16995A}.ni[data-c=sun]{--nc:#C98A0A}
+:root[data-theme="dark"] .ni[data-c=coral]{--nc:#FF8A6E}:root[data-theme="dark"] .ni[data-c=blue]{--nc:#7BA2F0}:root[data-theme="dark"] .ni[data-c=lilac]{--nc:#B6A6F2}:root[data-theme="dark"] .ni[data-c=green]{--nc:#5CC985}:root[data-theme="dark"] .ni[data-c=sun]{--nc:#F4C95D}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ni[data-c=coral]{--nc:#FF8A6E}:root:not([data-theme="light"]) .ni[data-c=blue]{--nc:#7BA2F0}:root:not([data-theme="light"]) .ni[data-c=lilac]{--nc:#B6A6F2}:root:not([data-theme="light"]) .ni[data-c=green]{--nc:#5CC985}:root:not([data-theme="light"]) .ni[data-c=sun]{--nc:#F4C95D}}
+body.inapp .side .nl:hover .ni{transform:rotate(-7deg) scale(1.08)}
+body.inapp .side .nl.on .ni{background:var(--grad);color:#fff}
+body.inapp .side .nl .cnt{margin-left:auto}
+.sidecard{margin:4px 0 10px;padding:16px;border-radius:20px;background:var(--card2);display:flex;flex-direction:column;gap:6px}
+.sidecard .sc-t{font-size:13px;color:var(--mut)}.sidecard .sc-n{font:600 38px/1 var(--fd);letter-spacing:-.03em}
+.sc-bar{height:7px;border-radius:5px;background:var(--line);overflow:hidden;margin:6px 0 8px}.sc-bar i{display:block;height:100%;background:var(--grad);border-radius:5px}
+body.inapp .side .me{margin:0;padding:10px 4px 0;border-top:1px solid var(--line)}
+.sidetog{display:none}
+@media(min-width:1000px){
+  body.inapp .app{transition:grid-template-columns .25s ease}
+  body.inapp .app.mini{grid-template-columns:96px 1fr}
+  .sidetog{display:grid;place-items:center;position:absolute;top:30px;right:-14px;width:28px;height:28px;border-radius:50%;border:0;background:var(--card);color:var(--ink);box-shadow:0 2px 10px rgba(15,15,20,.18);z-index:3;transition:transform .25s}
+  .sidetog:hover{background:var(--pri);color:var(--pri-ink)}
+  .sidetog svg{transform:rotate(180deg)}.app.mini .sidetog svg{transform:none}
+  .app.mini .side-scroll{padding:18px 10px 8px}.app.mini .side-foot{padding:6px 10px 14px}
+  .app.mini .lbl{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .app.mini .side .logo{justify-content:center;padding:2px 0 14px}
+  .app.mini .side a.nl,.app.mini .side button.nl{width:52px;height:52px;margin:0 auto 4px;padding:0;justify-content:center;border-radius:18px}
+  .app.mini .side .nl .cnt{position:absolute;top:2px;right:2px;margin:0}
+  .app.mini .nlsub,.app.mini .chev,.app.mini .sidecard,.app.mini .themerow{display:none}
+  .app.mini .side .grp{height:1px;background:var(--line);margin:10px 12px;padding:0}
+  .app.mini .side .me{flex-direction:column;border-top:0;padding:0;gap:8px}
+  .app.mini .page{max-width:1560px}
+}
+@media(prefers-reduced-motion:reduce){body.inapp .app,.sidetog,.ni{transition:none!important}body.inapp .side .nl:hover .ni{transform:none}}
+/* Tela Principal */
+.dash{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:760px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-wide,.dc-full{grid-column:1/-1}}
+@media(min-width:1180px){.dash{grid-template-columns:repeat(6,minmax(0,1fr))}.dash>.dc:nth-child(1),.dash>.dc:nth-child(2),.dash>.dc:nth-child(3){grid-column:span 2}.dc-wide{grid-column:span 4}.dash>.dc:nth-child(5){grid-column:span 2}.dc-full{grid-column:1/-1}}
+.dc{background:var(--card);border-radius:24px;padding:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:8px;min-width:0}
+.dc h3{margin:0 0 6px;font-size:18px}
+.dl{font-size:14px;opacity:.75}.dn{font:600 56px/1 var(--fd);letter-spacing:-.04em}.ds{font-size:14px;opacity:.7}
+.dc-dark{background:var(--ink);color:var(--bg)}
+.dc-coral{background:var(--grad);color:#fff}.dc-coral .ds,.dc-coral .dl{opacity:.92}
+.dwhite{margin-top:auto;align-self:flex-start;background:#fff;color:#0D0D0F!important;border-color:transparent}.dwhite:hover{background:#fff;border-color:transparent;transform:translateY(-1px)}
+.dlink{margin-top:auto;display:inline-flex;align-items:center;gap:6px;color:inherit!important;font-weight:600;font-size:14px;opacity:.9}
+.spark{display:flex;align-items:flex-end;gap:5px;height:46px;margin-top:auto}
+.spark i{flex:1;border-radius:4px;background:color-mix(in srgb,var(--bg) 30%,transparent);min-height:4px}.spark i.hi{background:var(--coral)}
+.dlist,.dtodo,.djobs,.dact{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+.dlist li,.dtodo li,.dact li{display:flex;align-items:center;gap:12px;margin:0}
+.dtodo li{padding:10px 12px;border-radius:16px;background:var(--card2)}
+.djobs li{margin:0}.djobs a{display:block;padding:12px 14px;border-radius:16px;background:var(--card2);color:var(--ink)!important;text-decoration:none!important;transition:transform .15s}.djobs a:hover{transform:translateY(-2px)}
+.dact{gap:0}.dact li{padding:11px 0;border-bottom:1px solid var(--line)}.dact li:last-child{border-bottom:0}
+.dact .dot{width:9px;height:9px;border-radius:50%;background:var(--coral);flex:none}
+body.inapp .themerow{display:none}
+.sidecard{padding:14px 16px;gap:4px}.sidecard .sc-n{font-size:32px}
+@media(max-height:1000px){body.inapp .sidecard{display:none}}
+@media(min-width:1000px){.app.mini .side a.nl,.app.mini .side button.nl{width:46px;height:46px;border-radius:16px}}
+body.inapp .side a.nl,body.inapp .side button.nl{min-height:40px;margin-bottom:1px}
+body.inapp .side .logo{padding-bottom:8px}

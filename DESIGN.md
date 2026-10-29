@@ -1,6 +1,6 @@
 # DESIGN.md — Vínculo (área logada: administrador, recrutador e empresa cliente)
 
-Direção: **"calmo, claro e confiante"**. Fundo cinza-claro, cartões brancos bem arredondados, um único cartão preto como destaque, um acento coral e muito espaço. Referência visual: o estudo de caso de dashboard enviado pelo cliente (vídeo "Menu – Leadora"). Adaptamos a linguagem (estrutura, forma, cor, tipografia); não copiamos marca, logo, textos nem ilustrações. A marca Vínculo (nome e anéis) é mantida.
+Versão 3. Direção: **"calmo, claro e com vida"**. Fundo cinza-claro, cartões brancos bem arredondados, um único cartão preto como destaque, um acento coral e muito espaço. Referência visual: o estudo de caso de dashboard enviado pelo cliente (vídeo "Menu – Leadora"). Adaptamos a linguagem (estrutura, forma, cor, tipografia); não copiamos marca, logo, textos nem ilustrações. A marca Vínculo (nome e anéis) é mantida.
 
 Escopo: tudo que usa o menu lateral (`body.inapp`). Site público, login e área do candidato mantêm o visual atual até decisão contrária.
 
@@ -20,6 +20,7 @@ Base de comparação: **não foi feita comparação com sites reais via UXKIN** 
 | `--pri-soft` | #F0F0EE | #232327 | fundos de seleção e chips |
 | `--coral` | #EE6A4C | #FF7A55 | acento: gráficos, progresso, destaques, ícones de atenção |
 | `--link` | #B33C17 | #FF9477 | links e texto em acento (≥ 5:1) |
+| `--grad` | #F9A07C → #EC5B33 | igual | cartão de destaque coral, item ativo do menu, barras de progresso |
 | `--green` | #1FA463 | #5CC985 | sucesso e variação positiva |
 | `--red` | #C23A26 | #F27D69 | erro e ações destrutivas |
 | `--sun` | #F4B73F | #F4C95D | alerta/atenção |
@@ -28,8 +29,7 @@ Base de comparação: **não foi feita comparação com sites reais via UXKIN** 
 Regras: preto é a cor de ação; coral só acompanha (nunca vira botão principal); no máximo um cartão preto e um cartão em gradiente coral por tela; texto branco sobre coral só em tamanho grande (≥ 24 px).
 
 ## Tipografia
-- Títulos e números: **Outfit** 500/600/700 (geométrica, como no vídeo), espaçamento −0.02 a −0.03em.
-- Texto e tabelas: **Figtree** 400/500/600 (leitura em tamanhos pequenos).
+- **Outfit** em tudo (títulos, números, menu, tabelas e formulários), pesos 400/500/600/700, como no vídeo. Antes eram Bricolage Grotesque e Figtree.
 - Escala: 12 · 13 · 15 (corpo) · 17 · 23 · 32–40 (saudação/título) · 34 (números KPI). Linhas 1,15 (títulos) e 1,55 (corpo).
 
 ## Espaço
@@ -48,6 +48,14 @@ Escala de 4 px (4, 8, 12, 16, 20, 24, 32, 48). Cartões com 20–24 px de respir
 - **Campos**: fundo branco, raio 14, foco com anel suave preto (claro) ou branco (escuro).
 - **Gráficos**: barras e linhas em coral; segunda série em lilás; verde para variação positiva.
 - **Tabelas**: dentro de cartão branco, linhas separadas por divisória clara, sem grade.
+
+## Menu lateral
+- Itens agrupados por tarefa: Recrutamento, Análise, Comunicação e Administração. Cada ícone fica num quadradinho colorido (coral, azul, lilás, verde, amarelo); o item ativo vira pílula preta com o ícone em gradiente coral.
+- **Recolher/expandir:** botão redondo na borda do menu. Recolhido, vira uma coluna de ícones (96 px) e a área central ganha a largura (até 1560 px). A escolha fica salva no navegador. No celular continua a gaveta.
+- Cartão "Para triar agora" no rodapé do menu, visível em telas altas.
+
+## Tela Principal
+Saudação grande, cartão preto (com mini-barras), cartão coral em gradiente, próximas entrevistas, lista "Precisa de atenção" com botões de ação, "Vagas em andamento" com barra de contratações e "Atividade recente".
 
 ## Ícones e imagens
 Mesmo conjunto de ícones de traço (1.8 px) já usado. Fotos só nas páginas públicas.

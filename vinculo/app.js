@@ -461,21 +461,35 @@ function pub(content) {
   <div><h4>Vínculo</h4><a href="#/privacidade">Política de privacidade</a><a href="#/termos">Termos de uso</a><a href="#/entrar">Acesso de demonstração</a></div>
   <div class="bot"><span>© ${new Date().getFullYear()} Vínculo. Seus dados tratados conforme a LGPD.</span><button class="btn ghost sm" data-act="reset">Restaurar dados de demonstração</button></div></div></footer>${bar}`;
 }
+const NAVC = { chart: 'coral', trend: 'coral', brief: 'blue', kanban: 'lilac', users: 'green', search: 'sun', inbox: 'coral', spark: 'lilac', file: 'blue', mail: 'green', bell: 'sun', building: 'blue', user: 'green', tag: 'lilac', shield: 'green', home: 'coral', plus: 'coral' };
+const SideMini = { get() { try { return localStorage.getItem('vinculo_side') === '1'; } catch (e) { return false; } }, set(v) { try { localStorage.setItem('vinculo_side', v ? '1' : '0'); } catch (e) { } } };
 function shell(content) {
   const u = curUser(), n = unreadOf(u), h = location.hash.replace('#', ''); document.body.classList.remove('hasbar');
-  const nl = (href, ic, label, badge) => `<a class="nl ${h === href || (href.length > 4 && h.startsWith(href + '/')) ? 'on' : ''}" href="#${href}" data-act="closeSide">${ico(ic)}<span class="grow">${label}</span>${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
+  if (ui.sideMini === undefined) ui.sideMini = SideMini.get();
+  const mini = !!ui.sideMini, tt = l => mini ? ` title="${l}"` : '';
+  const chip = ic => `<span class="ni" data-c="${NAVC[ic] || 'coral'}">${ico(ic, 18)}</span>`;
+  const nl = (href, ic, label, badge) => `<a class="nl ${h === href || (href.length > 4 && h.startsWith(href + '/')) ? 'on' : ''}" href="#${href}" data-act="closeSide" data-label="${label}"${tt(label)}>${chip(ic)}<span class="lbl grow">${label}</span>${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
+  const grp = t => `<div class="grp"><span class="lbl">${t}</span></div>`;
   const inInd = h.startsWith('/s/indicadores'), indOpen = ui.indOpen === false ? false : (ui.indOpen || inInd);
-  const indMenu = isStaff(u) ? `<button type="button" class="nl nlp ${inInd ? 'on' : ''}" data-act="indToggle" aria-expanded="${indOpen}">${ico('trend')}<span class="grow">Indicadores</span><span class="chev ${indOpen ? 'open' : ''}">${ico('right', 14)}</span></button>` + (indOpen ? `<div class="nlsub">${IND_SUBS.map(x => { const href = '/s/indicadores/' + x[0]; return `<a class="nl sub ${h === href || (x[0] === 'geral' && h === '/s/indicadores') ? 'on' : ''}" href="#${href}" data-act="closeSide">${x[0] === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : x[1]}</a>`; }).join('')}</div>` : '') : '';
-  let links;
-  if (u.role === 'client') links = nl('/e/painel', 'home', 'Meu painel') + nl('/e/solicitar', 'plus', 'Solicitar vaga') + nl('/e/notificacoes', 'bell', 'Notificações', n);
-  else {
+  const indMenu = isStaff(u) ? `<button type="button" class="nl nlp ${inInd ? 'on' : ''}" data-act="indToggle" aria-expanded="${indOpen}" data-label="Indicadores"${tt('Indicadores')}>${chip('trend')}<span class="lbl grow">Indicadores</span><span class="chev ${indOpen ? 'open' : ''}">${ico('right', 14)}</span></button>` + (indOpen ? `<div class="nlsub">${IND_SUBS.map(x => { const href = '/s/indicadores/' + x[0]; return `<a class="nl sub ${h === href || (x[0] === 'geral' && h === '/s/indicadores') ? 'on' : ''}" href="#${href}" data-act="closeSide">${x[0] === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : x[1]}</a>`; }).join('')}</div>` : '') : '';
+  let links, card;
+  if (u.role === 'client') {
+    links = nl('/e/painel', 'home', 'Meu painel') + nl('/e/solicitar', 'plus', 'Solicitar vaga') + nl('/e/notificacoes', 'bell', 'Notificações', n);
+    card = `<div class="sidecard"><span class="sc-t">Precisa de um novo profissional?</span><a class="btn pri sm block" href="#/e/solicitar">${ico('plus', 14)} Solicitar vaga</a></div>`;
+  } else {
     const reqs = db.requests.filter(r => r.status === 'nova').length;
-    links = nl('/s/dashboard', 'chart', 'Tela Principal') + indMenu + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/kanban', 'kanban', 'Kanban') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs) + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
-    if (u.role === 'admin') links += `<div class="grp">Administração</div>` + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/cargos', 'tag', 'Cargos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
+    links = nl('/s/dashboard', 'chart', 'Tela Principal') + grp('Recrutamento') + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/kanban', 'kanban', 'Kanban') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs)
+      + grp('Análise') + indMenu + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios')
+      + grp('Comunicação') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
+    if (u.role === 'admin') links += grp('Administração') + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/cargos', 'tag', 'Cargos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
+    const act = db.apps.filter(a => !CLOSED.includes(a.stage)), nw = act.filter(a => a.stage === 'novo').length, ok = act.length ? Math.round(100 * (act.length - nw) / act.length) : 100;
+    card = `<div class="sidecard"><span class="sc-t">Para triar agora</span><b class="sc-n">${nw}</b><span class="sc-t">${nw === 1 ? 'candidatura nova' : 'candidaturas novas'}</span><div class="sc-bar" title="${ok}% das candidaturas em andamento já passaram da triagem"><i style="width:${ok}%"></i></div><a class="btn pri sm block" href="#/s/triagem">Ir para a triagem</a></div>`;
   }
   const search = isStaff(u) ? `<form class="srch" data-form="gsearch" role="search">${ico('search', 18)}<input name="q" placeholder="Buscar talento por nome, cargo ou competência" aria-label="Buscar talento"></form>` : '<div class="grow"></div>';
   document.body.classList.add('inapp');
-  return `<div class="app ${ui.side ? 'open' : ''}"><aside class="side" aria-label="Menu"><a class="logo" href="#${homeOf(u)}">${LOGO}vínculo</a>${links}<div class="themerow"><span class="xs mut b">Aparência</span>${themeSeg()}</div><div class="me">${avatar(u.name, 36)}<div class="grow"><div class="b sm">${esc(u.name)}</div><div class="xs mut">${ROLE_NAME[u.role]}${u.companyId ? ' — ' + esc(compName(u.companyId)) : ''}</div></div><button class="iconbtn" data-act="logout" aria-label="Sair">${ico('out')}</button></div></aside><div class="scrim" data-act="closeSide"></div>
+  return `<div class="app ${ui.side ? 'open' : ''} ${mini ? 'mini' : ''}"><aside class="side" aria-label="Menu"><button type="button" class="sidetog" data-act="sideMini" aria-label="${mini ? 'Expandir menu' : 'Recolher menu'}" title="${mini ? 'Expandir menu' : 'Recolher menu'}">${ico('right', 16)}</button>
+  <div class="side-scroll"><a class="logo" href="#${homeOf(u)}">${LOGO}<span class="lbl">vínculo</span></a>${links}</div>
+  <div class="side-foot">${card}<div class="themerow"><span class="xs mut b">Aparência</span>${themeSeg()}</div><div class="me">${avatar(u.name, 38)}<div class="lbl grow"><div class="b sm">${esc(u.name)}</div><div class="xs mut">${ROLE_NAME[u.role]}${u.companyId ? ' — ' + esc(compName(u.companyId)) : ''}</div></div><button class="iconbtn" data-act="logout" aria-label="Sair" title="Sair">${ico('out')}</button></div></div></aside><div class="scrim" data-act="closeSide"></div>
   <div class="mainc"><div class="bar"><button class="iconbtn menub" data-act="openSide" aria-label="Abrir menu">${ico('menu')}</button>${search}${themeBtn()}<a class="iconbtn" href="#/${u.role === 'client' ? 'e' : 's'}/notificacoes" aria-label="Notificações">${ico('bell')}${n ? `<span class="cnt">${n}</span>` : ''}</a></div><main class="page">${content}</main></div></div>`;
 }
 const pageHead = (title, sub, actions) => `<div class="ph"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div><div class="flex gap wrap">${actions || ''}</div></div>`;
@@ -934,17 +948,28 @@ function indGeral() {
   <div class="g2 mt"><div class="card"><h3>Candidatos por etapa</h3>${hbars(byStage)}</div><div class="card"><h3>Novas candidaturas por semana</h3>${svg}</div>
   <div class="card"><h3>Vagas com mais candidatos</h3>${hbars(topJobs)}</div><div class="card"><h3>Funil: quantos chegaram a cada etapa</h3>${hbars(funnel)}</div></div>`;
 }
+const weekSeries = (dates, n) => { const now = Date.now(), W = 7 * 864e5, out = Array(n).fill(0); dates.forEach(d => { if (!d) return; const k = Math.floor((now - new Date(d)) / W); if (k >= 0 && k < n) out[n - 1 - k]++; }); return out; };
+const sparkBars = vals => { const mx = Math.max(1, ...vals); return `<div class="spark" aria-hidden="true">${vals.map((v, i) => `<i class="${i === vals.length - 1 ? 'hi' : ''}" style="height:${Math.max(10, Math.round(100 * v / mx))}%"></i>`).join('')}</div>`; };
 function dashboard() {
-  const u = curUser(), apps = db.apps;
-  const todo = [], oldNew = apps.filter(a => a.stage === 'novo' && Date.now() - new Date(a.date) > 2 * 864e5).length;
-  if (oldNew) todo.push(`<a href="#/s/triagem">${oldNew} candidaturas novas aguardam triagem há mais de 2 dias</a>`);
-  const rq = db.requests.filter(r => r.status === 'nova').length; if (rq) todo.push(`<a href="#/s/solicitacoes">${rq} solicitação de vaga de empresa cliente</a>`);
-  const cl = apps.filter(a => a.stage === 'entrevista_cliente' && !a.clientDecision).length; if (cl) todo.push(`${cl} candidatos aguardando avaliação das empresas`);
-  const dr = db.delReqs.filter(r => r.status === 'pendente').length; if (dr && u.role === 'admin') todo.push(`<a href="#/s/lgpd">${dr} pedido de exclusão de dados (LGPD)</a>`);
-  const nc = db.cands.filter(c => !c.deleted).length;
-  return shell(`${pageHead('Olá, ' + esc(u.name.split(' ')[0]), 'O que precisa da sua atenção hoje.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a><a class="btn" href="#/s/banco">Buscar no banco</a><a class="btn" href="#/s/indicadores/geral">${ico('trend', 16)} Ver indicadores</a>`)}
-  ${u.role === 'admin' ? `<div class="kpis"><div class="kpi"><span>Candidatos cadastrados</span><b>${nc}</b><small>perfis no banco de talentos</small></div></div>` : ''}
-  <div class="card mt"><h3>Precisa de atenção</h3>${todo.length ? `<ul>${todo.map(t => `<li>${t}</li>`).join('')}</ul>` : '<p class="mut">Nada pendente.</p>'}</div>`);
+  const u = curUser(), apps = db.apps, now = Date.now(), hr = new Date().getHours(), hi = hr < 12 ? 'Bom dia' : hr < 18 ? 'Boa tarde' : 'Boa noite';
+  const act = apps.filter(a => !CLOSED.includes(a.stage)), novas = act.filter(a => a.stage === 'novo'), velhas = novas.filter(a => now - new Date(a.date) > 2 * 864e5);
+  const todo = [];
+  if (velhas.length) todo.push(['search', 'coral', `${velhas.length} candidaturas novas aguardam triagem há mais de 2 dias`, '#/s/triagem', 'Triar']);
+  const rq = db.requests.filter(r => r.status === 'nova').length; if (rq) todo.push(['inbox', 'blue', `${rq} solicitação de vaga de empresa cliente`, '#/s/solicitacoes', 'Ver']);
+  const cl = apps.filter(a => a.stage === 'entrevista_cliente' && !a.clientDecision).length; if (cl) todo.push(['users', 'lilac', `${cl} candidatos aguardando avaliação das empresas`, '#/s/kanban', 'Acompanhar']);
+  const dr = db.delReqs.filter(r => r.status === 'pendente').length; if (dr && u.role === 'admin') todo.push(['shield', 'green', `${dr} pedido de exclusão de dados (LGPD)`, '#/s/lgpd', 'Revisar']);
+  const ncands = db.cands.filter(c => !c.deleted), openJobs = db.jobs.filter(j => j.status === 'open');
+  const hero = u.role === 'admin' ? { l: 'Candidatos cadastrados', v: ncands.length, t: 'perfis no banco de talentos', s: weekSeries(ncands.map(c => c.createdAt), 12), href: '#/s/banco', b: 'Abrir banco' } : { l: 'Vagas abertas', v: openJobs.length, t: 'recebendo candidaturas', s: weekSeries(apps.map(a => a.date), 12), href: '#/s/vagas', b: 'Ver vagas' };
+  const nextIv = apps.filter(a => a.interview && !CLOSED.includes(a.stage) && new Date(a.interview.date) >= now).sort((x, y) => new Date(x.interview.date) - new Date(y.interview.date)).slice(0, 3);
+  const jobs = openJobs.map(j => ({ j, n: jobApps(j.id).length, h: jobApps(j.id).filter(a => a.stage === 'contratado').length })).sort((x, y) => y.n - x.n).slice(0, 4);
+  const recent = db.audit.slice(0, 6);
+  return shell(`${pageHead(hi + ', ' + esc(u.name.split(' ')[0]), 'O que precisa da sua atenção hoje.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a><a class="btn" href="#/s/banco">Buscar no banco</a><a class="btn" href="#/s/indicadores/geral">${ico('trend', 16)} Ver indicadores</a>`)}
+  <div class="dash"><section class="dc dc-dark"><span class="dl">${hero.l}</span><b class="dn">${hero.v}</b><span class="ds">${hero.t}</span>${sparkBars(hero.s)}<a class="dlink" href="${hero.href}">${hero.b} ${ico('right', 14)}</a></section>
+  <section class="dc dc-coral"><span class="dl">Aguardando triagem</span><b class="dn">${novas.length}</b><span class="ds">${velhas.length ? velhas.length + ' há mais de 2 dias' : 'tudo dentro do prazo'}</span><a class="btn dwhite" href="#/s/triagem">Triar agora ${ico('right', 14)}</a></section>
+  <section class="dc"><h3>Próximas entrevistas</h3>${nextIv.length ? `<ul class="dlist">${nextIv.map(a => { const c = by('cands', a.candId), j = by('jobs', a.jobId); return `<li>${avatar(c.name, 34)}<div class="grow"><div class="b sm">${esc(c.name)}</div><div class="xs mut">${esc(j ? j.title : '')} · ${a.interview.type}</div></div><span class="badge">${fdt(a.interview.date)}</span></li>`; }).join('')}</ul>` : '<p class="mut sm">Nenhuma entrevista agendada.</p>'}</section>
+  <section class="dc dc-wide"><h3>Precisa de atenção</h3>${todo.length ? `<ul class="dtodo">${todo.map(t => `<li><span class="ni" data-c="${t[1]}">${ico(t[0], 18)}</span><span class="grow">${t[2]}</span><a class="btn sm" href="${t[3]}">${t[4]}</a></li>`).join('')}</ul>` : '<p class="mut">Nada pendente. Bom trabalho!</p>'}</section>
+  <section class="dc"><h3>Vagas em andamento</h3>${jobs.length ? `<ul class="djobs">${jobs.map(x => `<li><a href="#/s/vaga/${x.j.id}"><div class="b sm">${esc(x.j.title)}</div><div class="xs mut">${esc(compName(x.j.companyId))} · ${x.n} ${x.n === 1 ? 'candidato' : 'candidatos'}</div><div class="prog mt-s"><i style="width:${Math.min(100, Math.round(100 * x.h / (x.j.qty || 1)))}%"></i></div><div class="xs mut">${x.h}/${x.j.qty || 1} ${(x.j.qty || 1) === 1 ? 'contratado' : 'contratados'}</div></a></li>`).join('')}</ul>` : '<p class="mut sm">Nenhuma vaga aberta.</p>'}</section>
+  <section class="dc dc-full"><h3>Atividade recente</h3>${recent.length ? `<ul class="dact">${recent.map(l => `<li><span class="dot"></span><div class="grow"><span class="b sm">${esc(l.action)}</span> <span class="sm">${esc(l.ref || '')}</span><div class="xs mut">${esc(l.user)}</div></div><span class="xs mut">${ago(l.date)}</span></li>`).join('')}</ul>` : '<p class="mut sm">Sem atividade registrada.</p>'}</section></div>`);
 }
 
 /* ---------- Vagas (gestão) ---------- */
@@ -1775,7 +1800,8 @@ const actions = {
   reasonEdit(t) { const a = by('apps', t.dataset.app); if (a) reasonModal(a.id, a.stage); },
   nvSel(t) { ui.nv = ui.nv || {}; ui.nv.p = t.value; if (t.value === 'custom' && !ui.nv.from) { const d = new Date(); ui.nv.to = isoDay(d); ui.nv.from = isoDay(new Date(d.getTime() - 29 * 864e5)); } render(true); },
   nvDate(t) { ui.nv = ui.nv || { p: 'custom' }; ui.nv[t.dataset.k] = t.value; if (ui.nv.from && ui.nv.to && ui.nv.from > ui.nv.to) { const x = ui.nv.from; ui.nv.from = ui.nv.to; ui.nv.to = x; } render(true); },
-  indToggle() { const inInd = location.hash.startsWith('#/s/indicadores'), open = ui.indOpen === false ? false : (ui.indOpen || inInd); if (open) { ui.indOpen = false; render(true); } else { ui.indOpen = true; if (inInd) render(true); else go('/s/indicadores/geral'); } },
+  sideMini() { ui.sideMini = !ui.sideMini; SideMini.set(ui.sideMini); const a = $('.app'); if (a) a.classList.toggle('mini', ui.sideMini); $$('.side .nl[data-label]').forEach(x => ui.sideMini ? x.setAttribute('title', x.dataset.label) : x.removeAttribute('title')); const b = $('.sidetog'); if (b) { const t = ui.sideMini ? 'Expandir menu' : 'Recolher menu'; b.setAttribute('aria-label', t); b.title = t; } },
+  indToggle() { if (ui.sideMini && window.innerWidth >= 1000) return go('/s/indicadores/geral'); const inInd = location.hash.startsWith('#/s/indicadores'), open = ui.indOpen === false ? false : (ui.indOpen || inInd); if (open) { ui.indOpen = false; render(true); } else { ui.indOpen = true; if (inInd) render(true); else go('/s/indicadores/geral'); } },
   indSel(t) { ui.ind = ui.ind || { p: '90d', co: '', rec: '' }; ui.ind[t.dataset.k] = t.value; render(true); },
   toggleUser(t) { const u = by('users', t.dataset.id); u.active = u.active === false; audit(u.active ? 'Usuário reativado' : 'Usuário desativado', u.email); save(); render(true); },
   execDelete(t) {
