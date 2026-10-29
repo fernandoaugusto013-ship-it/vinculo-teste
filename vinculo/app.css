@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
 :root{
   --bg:#FAF7F2;--card:#FFFFFF;--card2:#F4F0E8;--ink:#1C2321;--mut:#5E6763;--line:#E7E1D6;
   --pri:#0F5C4D;--pri-h:#0B4A3E;--pri-ink:#FFFFFF;--pri-soft:#E1EFE9;
@@ -476,3 +477,78 @@ pre.data{white-space:pre-wrap;word-break:break-word;background:var(--card2);bord
 .sh-sep{display:flex;align-items:center;gap:12px;margin:20px 0 12px;font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
 .sh-sep::before,.sh-sep::after{content:"";flex:1;height:1px;background:var(--line)}
 .sh-nets{display:flex;flex-wrap:wrap;gap:8px}
+
+/* ===== Design system v2 (DESIGN.md): área logada — administrador, recrutador, empresa cliente ===== */
+body.inapp{
+  --bg:#EBEBEA;--card:#FFFFFF;--card2:#F5F5F4;--ink:#0D0D0F;--mut:#62626A;--line:#E2E2E0;
+  --pri:#0D0D0F;--pri-h:#2B2B30;--pri-ink:#FFFFFF;--pri-soft:#F0F0EE;
+  --coral:#EE6A4C;--coral-soft:#FDE6DF;--link:#B33C17;
+  --green:#1FA463;--green-soft:#DFF5E8;--red:#C23A26;--red-soft:#FBE4DE;--sun:#F4B73F;--sun-soft:#FCF1D3;--lilac:#8E7BD6;--lilac-soft:#EEEAFB;--blue:#3A6FD8;
+  --shadow:0 1px 2px rgba(15,15,20,.04),0 12px 32px -16px rgba(15,15,20,.14);
+  --r:24px;--fd:'Outfit','Segoe UI',system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body.inapp{
+  --bg:#0E0E10;--card:#17171A;--card2:#1F1F23;--ink:#F2F2F3;--mut:#A3A3AB;--line:#2A2A2E;
+  --pri:#F2F2F3;--pri-h:#FFFFFF;--pri-ink:#0D0D0F;--pri-soft:#232327;--coral:#FF7A55;--coral-soft:#3B221C;--link:#FF9477;
+  --green:#5CC985;--green-soft:#173626;--red:#F27D69;--red-soft:#3A1F1A;--sun:#F4C95D;--sun-soft:#3A3013;--lilac:#B6A6F2;--lilac-soft:#29243D;--blue:#7BA2F0;
+  --shadow:0 0 0 1px rgba(255,255,255,.07);}}
+:root[data-theme="dark"] body.inapp{
+  --bg:#0E0E10;--card:#17171A;--card2:#1F1F23;--ink:#F2F2F3;--mut:#A3A3AB;--line:#2A2A2E;
+  --pri:#F2F2F3;--pri-h:#FFFFFF;--pri-ink:#0D0D0F;--pri-soft:#232327;--coral:#FF7A55;--coral-soft:#3B221C;--link:#FF9477;
+  --green:#5CC985;--green-soft:#173626;--red:#F27D69;--red-soft:#3A1F1A;--sun:#F4C95D;--sun-soft:#3A3013;--lilac:#B6A6F2;--lilac-soft:#29243D;--blue:#7BA2F0;
+  --shadow:0 0 0 1px rgba(255,255,255,.07);}
+body.inapp a:not([class]){color:var(--link)}
+body.inapp .hbar[style*="--c:var(--pri)"]{--c:var(--coral)!important}
+body.inapp .btn.pri{background:var(--pri);border-color:var(--pri);color:var(--pri-ink)}
+body.inapp .btn.pri:hover{background:var(--pri-h);border-color:var(--pri-h);box-shadow:0 10px 24px -12px rgba(15,15,20,.5)}
+body.inapp .btn{border-color:var(--line)}
+body.inapp .btn.danger{color:var(--red)}
+body.inapp .card,body.inapp .kpi,body.inapp .tw,body.inapp .modal{border-color:transparent;box-shadow:var(--shadow)}
+body.inapp .kpi{border-radius:20px;padding:18px 20px}
+body.inapp .kpi b{font-size:34px;font-weight:600;letter-spacing:-.03em}
+body.inapp .kpis .kpi:first-child{background:var(--ink);color:var(--bg)}
+body.inapp .kpis .kpi:first-child span,body.inapp .kpis .kpi:first-child small{color:color-mix(in srgb,var(--bg) 62%,transparent)}
+body.inapp .kpis .kpi:first-child b{color:var(--bg)}
+body.inapp .tw{border-radius:20px}
+body.inapp th{font-weight:600;color:var(--mut)}
+body.inapp input,body.inapp select,body.inapp textarea{border-radius:14px;border-color:var(--line)}
+body.inapp input:focus,body.inapp select:focus,body.inapp textarea:focus{border-color:var(--ink);box-shadow:0 0 0 4px color-mix(in srgb,var(--ink) 10%,transparent)}
+body.inapp :focus-visible{outline-color:var(--ink)}
+body.inapp .eyebrow{color:var(--ink)}
+body.inapp .ph h2{font-size:clamp(28px,3.6vw,40px);font-weight:600;letter-spacing:-.03em;line-height:1.08}
+body.inapp .ph p{font-size:15px}
+body.inapp h3{font-weight:600;letter-spacing:-.02em}
+/* barra superior */
+body.inapp .bar{background:transparent;backdrop-filter:none;border-bottom:0;padding:14px 16px}
+body.inapp .bar .srch input{border-radius:99px;background:var(--card);border-color:transparent;box-shadow:var(--shadow);min-height:44px}
+body.inapp .iconbtn{border-radius:50%;border-color:transparent;background:var(--card);box-shadow:var(--shadow);width:44px;height:44px}
+/* menu lateral */
+body.inapp .side{background:var(--card);border-right:0}
+body.inapp .side a.nl,body.inapp .side button.nl{border-radius:99px;padding:10px 14px}
+body.inapp .side a.nl:hover,body.inapp .side button.nl:hover{background:var(--card2)}
+body.inapp .side a.nl.on,body.inapp .side button.nl.on{background:var(--pri);color:var(--pri-ink);font-weight:600}
+body.inapp .side a.nl.sub{padding:7px 14px}
+body.inapp .side a.nl.sub.on{background:var(--card2);color:var(--ink);font-weight:600}
+body.inapp .side .nlsub{border-left-color:var(--line)}
+body.inapp .side .grp{text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+body.inapp .side .me{border-top-color:var(--line)}
+@media(min-width:1000px){
+  body.inapp .app{grid-template-columns:284px 1fr}
+  body.inapp .side{top:12px;height:calc(100vh - 24px);margin:12px 0 12px 12px;width:auto;border-radius:24px;box-shadow:var(--shadow);padding:18px 12px}
+}
+/* acento coral nos dados */
+body.inapp .hbar i,body.inapp .wk rect,body.inapp .prog i{background:var(--c,var(--coral));fill:var(--coral)}
+body.inapp .wk rect{background:none}
+body.inapp .prog{background:var(--card2);border-color:transparent}
+body.inapp .ring{background:conic-gradient(var(--coral) calc(var(--p)*1%),var(--line) 0)}
+body.inapp .tl .done .d,body.inapp .wiz i.on{background:var(--coral);border-color:var(--coral)}
+body.inapp .tl .done::before{background:var(--coral)}
+body.inapp .tl .cur .d{border-color:var(--coral);box-shadow:0 0 0 4px color-mix(in srgb,var(--coral) 22%,transparent)}
+body.inapp .tl .cur b{color:var(--link)}
+body.inapp .score{background:var(--coral-soft);color:var(--link)}
+body.inapp .opts label:has(input:checked){background:var(--pri);border-color:var(--pri);color:var(--pri-ink)}
+body.inapp .chip{background:var(--card2);color:var(--ink)}
+body.inapp .kcard{border-radius:18px;border-color:transparent;box-shadow:var(--shadow)}
+body.inapp .kcol{border-radius:20px}
+body.inapp .modal{border-radius:24px}
+body.inapp .toast{border-radius:99px}

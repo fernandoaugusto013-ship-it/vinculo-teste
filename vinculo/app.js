@@ -454,7 +454,7 @@ function pub(content) {
   else nav = `<a href="#/vagas">Vagas</a><a class="btn pri sm" href="#${homeOf(u)}">Ir para meu painel</a><button class="btn ghost sm" data-act="logout">Sair</button>`;
   const tab = (href, ic, label, badge) => `<a href="#${href}" class="${h.startsWith('#' + href) ? 'on' : ''}">${ico(ic, 22)}${label}${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
   const bar = cand ? `<nav class="tabbar" aria-label="Menu do candidato">${tab('/vagas', 'search', 'Vagas')}${tab('/c/candidaturas', 'brief', 'Candidaturas')}${tab('/c/perfil', 'user', 'Perfil')}${tab('/c/notificacoes', 'bell', 'Avisos', n)}</nav>` : '';
-  document.body.classList.toggle('hasbar', !!cand);
+  document.body.classList.toggle('hasbar', !!cand); document.body.classList.remove('inapp');
   return `<header class="top"><div class="top-in"><a class="logo" href="#/">${LOGO}vínculo</a><nav>${nav}${themeBtn()}</nav></div></header>${content}<footer class="foot2"><div class="foot2-in"><div><a class="logo" href="#/">${LOGO}vínculo</a><p class="mut sm mt-s" style="max-width:320px">Uma ponte entre pessoas e oportunidades. Conectamos talentos às vagas certas e empresas às pessoas que precisam.</p><div class="mt">${themeSeg()}</div></div>
   <div><h4>Profissionais</h4><a href="#/vagas">Buscar vagas</a><a href="#/cadastro">Cadastrar currículo</a><a href="#/entrar">Área do candidato</a></div>
   <div><h4>Empresas</h4><a href="#/para-empresas">Recrutamento e seleção</a><a href="#/para-empresas">Banco de talentos</a><a href="#/entrar">Área da empresa</a></div>
@@ -474,6 +474,7 @@ function shell(content) {
     if (u.role === 'admin') links += `<div class="grp">Administração</div>` + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/cargos', 'tag', 'Cargos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
   }
   const search = isStaff(u) ? `<form class="srch" data-form="gsearch" role="search">${ico('search', 18)}<input name="q" placeholder="Buscar talento por nome, cargo ou competência" aria-label="Buscar talento"></form>` : '<div class="grow"></div>';
+  document.body.classList.add('inapp');
   return `<div class="app ${ui.side ? 'open' : ''}"><aside class="side" aria-label="Menu"><a class="logo" href="#${homeOf(u)}">${LOGO}vínculo</a>${links}<div class="themerow"><span class="xs mut b">Aparência</span>${themeSeg()}</div><div class="me">${avatar(u.name, 36)}<div class="grow"><div class="b sm">${esc(u.name)}</div><div class="xs mut">${ROLE_NAME[u.role]}${u.companyId ? ' — ' + esc(compName(u.companyId)) : ''}</div></div><button class="iconbtn" data-act="logout" aria-label="Sair">${ico('out')}</button></div></aside><div class="scrim" data-act="closeSide"></div>
   <div class="mainc"><div class="bar"><button class="iconbtn menub" data-act="openSide" aria-label="Abrir menu">${ico('menu')}</button>${search}${themeBtn()}<a class="iconbtn" href="#/${u.role === 'client' ? 'e' : 's'}/notificacoes" aria-label="Notificações">${ico('bell')}${n ? `<span class="cnt">${n}</span>` : ''}</a></div><main class="page">${content}</main></div></div>`;
 }
