@@ -71,3 +71,6 @@ Gradientes roxo/azul, vidro fosco em tudo, cartões idênticos repetidos sem hie
 
 ## Aparência (v5)
 Seletor Claro / Escuro / Auto restaurado no rodapé do menu lateral; no menu reduzido aparece um botão único de alternância. O botão da barra superior continua disponível.
+
+## Página inicial (v6)
+Hero imersivo em tela cheia (foto + véu escuro), título leve (Inter Tight 300, -0.05em), cabeçalho em vidro translúcido, 4 cartões de vidro, seções em caixas de 40px de raio, passos numerados com barra de progresso, FAQ em acordeão e rodapé em caixa. Escopo: apenas a rota "#/" (classe body.lp). Painéis e demais páginas públicas não mudam.
