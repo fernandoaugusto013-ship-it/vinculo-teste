@@ -809,3 +809,14 @@ body.lp .demo-go{color:rgba(255,255,255,.72)}body.lp .demo-row:hover .demo-go{co
 body.lp .demo-av{color:#fff;background:color-mix(in srgb,var(--c) 60%,rgba(0,0,0,.25))}
 @media(max-width:879px){body.lp .auth{padding-top:110px}}
 body.lp .auth-card{color:var(--ink)}body.lp .auth-card h1{color:var(--ink)}
+
+/* ===== v8: entrada mais lenta do hero — a foto aparece primeiro, o texto vem depois ===== */
+@keyframes lpfade{from{opacity:0}to{opacity:1}}
+@keyframes lpup{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.lp-bg img{animation:lpfade 1.4s ease-out both,lpzoom 24s ease-out both}
+.lp-in>*{animation:lpup 1.5s cubic-bezier(.22,.61,.36,1) both}
+.lp-in>:nth-child(1){animation-delay:1.5s}.lp-in>:nth-child(2){animation-delay:1.75s}.lp-in>:nth-child(3){animation-delay:2s}.lp-in>:nth-child(4){animation-delay:2.25s}.lp-in>:nth-child(5){animation-delay:2.5s}
+.lp-feat{animation:lpup 1.4s cubic-bezier(.22,.61,.36,1) both}
+.lp-feat:nth-child(1){animation-delay:2.7s}.lp-feat:nth-child(2){animation-delay:2.85s}.lp-feat:nth-child(3){animation-delay:3s}.lp-feat:nth-child(4){animation-delay:3.15s}
+body.lp .auth-in{animation:lpup 1.4s 1.1s cubic-bezier(.22,.61,.36,1) both}
+@media(prefers-reduced-motion:reduce){.lp-bg img,.lp-in>*,.lp-feat,body.lp .auth-in{animation:none}}
