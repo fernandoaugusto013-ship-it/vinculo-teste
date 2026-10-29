@@ -616,3 +616,53 @@ body.inapp .themerow{display:none}
 @media(min-width:1000px){.app.mini .side a.nl,.app.mini .side button.nl{width:46px;height:46px;border-radius:16px}}
 body.inapp .side a.nl,body.inapp .side button.nl{min-height:40px;margin-bottom:1px}
 body.inapp .side .logo{padding-bottom:8px}
+
+/* ===== DS4: menu ativo colorido e translúcido + camadas de vidro (premium) ===== */
+body.inapp{
+  --bg:#EEEDF1;--glass:rgba(255,255,255,.66);--glass-line:rgba(255,255,255,.85);--glass-shadow:0 1px 0 rgba(255,255,255,.9) inset,0 18px 40px -26px rgba(48,36,80,.28);
+  background:
+    radial-gradient(900px 520px at 6% -8%,rgba(238,106,76,.20),transparent 62%),
+    radial-gradient(820px 520px at 100% 0%,rgba(122,99,208,.16),transparent 62%),
+    radial-gradient(900px 620px at 62% 112%,rgba(58,111,216,.12),transparent 62%),
+    var(--bg);
+  background-attachment:fixed;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body.inapp{
+  --bg:#0D0D12;--glass:rgba(255,255,255,.055);--glass-line:rgba(255,255,255,.09);--glass-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -26px rgba(0,0,0,.8);
+  background:radial-gradient(900px 520px at 6% -8%,rgba(255,122,85,.17),transparent 62%),radial-gradient(820px 520px at 100% 0%,rgba(150,120,255,.16),transparent 62%),radial-gradient(900px 620px at 62% 112%,rgba(80,130,240,.12),transparent 62%),var(--bg);background-attachment:fixed}}
+:root[data-theme="dark"] body.inapp{
+  --bg:#0D0D12;--glass:rgba(255,255,255,.055);--glass-line:rgba(255,255,255,.09);--glass-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -26px rgba(0,0,0,.8);
+  background:radial-gradient(900px 520px at 6% -8%,rgba(255,122,85,.17),transparent 62%),radial-gradient(820px 520px at 100% 0%,rgba(150,120,255,.16),transparent 62%),radial-gradient(900px 620px at 62% 112%,rgba(80,130,240,.12),transparent 62%),var(--bg);background-attachment:fixed}
+/* camadas translúcidas */
+body.inapp .card,body.inapp .kpi,body.inapp .tw,body.inapp .dc,body.inapp .side,body.inapp .kcard,body.inapp .sidecard,body.inapp .iconbtn,body.inapp .bar .srch input{
+  background:var(--glass);border:1px solid var(--glass-line);box-shadow:var(--glass-shadow)}
+body.inapp .dc-dark{background:linear-gradient(150deg,#26233a 0%,#121218 62%);border-color:rgba(255,255,255,.10);color:#fff}
+body.inapp .dc-dark .dn,body.inapp .dc-dark .dlink{color:#fff}body.inapp .dc-dark .spark i{background:rgba(255,255,255,.22)}body.inapp .dc-dark .spark i.hi{background:var(--coral)}
+body.inapp .kpis .kpi:first-child{background:linear-gradient(150deg,#26233a 0%,#121218 62%);border-color:rgba(255,255,255,.10);color:#fff}
+body.inapp .kpis .kpi:first-child span,body.inapp .kpis .kpi:first-child small{color:rgba(255,255,255,.66)}body.inapp .kpis .kpi:first-child b{color:#fff}
+body.inapp .dc-coral{border:1px solid rgba(255,255,255,.35);box-shadow:0 22px 44px -26px rgba(236,91,51,.7),0 1px 0 rgba(255,255,255,.4) inset}
+body.inapp .dtodo li,body.inapp .djobs a,body.inapp .sidecard{background:color-mix(in srgb,var(--card2) 55%,transparent);box-shadow:none}
+body.inapp .sidecard{border-color:var(--glass-line)}
+body.inapp .modal{background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--glass-line);backdrop-filter:blur(18px)}
+body.inapp .ov{backdrop-filter:blur(6px)}
+body.inapp .bar{backdrop-filter:blur(14px);background:color-mix(in srgb,var(--bg) 40%,transparent)}
+body.inapp .card .card,body.inapp .tw .card{box-shadow:none}
+body.inapp input,body.inapp select,body.inapp textarea{background:color-mix(in srgb,var(--card) 80%,transparent)}
+body.inapp th{background:color-mix(in srgb,var(--card2) 45%,transparent)}
+/* item ativo do menu: cor viva, translúcida, com entrada suave */
+.side .nl[data-c=coral]{--nc:#E5573A}.side .nl[data-c=blue]{--nc:#3A6FD8}.side .nl[data-c=lilac]{--nc:#7A63D0}.side .nl[data-c=green]{--nc:#16995A}.side .nl[data-c=sun]{--nc:#C98A0A}
+:root[data-theme="dark"] .side .nl[data-c=coral]{--nc:#FF8A6E}:root[data-theme="dark"] .side .nl[data-c=blue]{--nc:#7BA2F0}:root[data-theme="dark"] .side .nl[data-c=lilac]{--nc:#B6A6F2}:root[data-theme="dark"] .side .nl[data-c=green]{--nc:#5CC985}:root[data-theme="dark"] .side .nl[data-c=sun]{--nc:#F4C95D}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .side .nl[data-c=coral]{--nc:#FF8A6E}:root:not([data-theme="light"]) .side .nl[data-c=blue]{--nc:#7BA2F0}:root:not([data-theme="light"]) .side .nl[data-c=lilac]{--nc:#B6A6F2}:root:not([data-theme="light"]) .side .nl[data-c=green]{--nc:#5CC985}:root:not([data-theme="light"]) .side .nl[data-c=sun]{--nc:#F4C95D}}
+body.inapp .side a.nl.on,body.inapp .side button.nl.on{
+  background:linear-gradient(110deg,color-mix(in srgb,var(--nc,var(--coral)) 26%,transparent),color-mix(in srgb,var(--nc,var(--coral)) 7%,transparent));
+  color:var(--ink);font-weight:600;
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--nc,var(--coral)) 36%,transparent),0 10px 26px -14px var(--nc,var(--coral))}
+body.inapp .side .nl.on .ni{background:linear-gradient(135deg,color-mix(in srgb,var(--nc,var(--coral)) 72%,#fff),var(--nc,var(--coral)));color:#fff;box-shadow:0 6px 14px -6px var(--nc,var(--coral))}
+body.inapp .side a.nl.sub.on{background:color-mix(in srgb,var(--coral) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--coral) 26%,transparent);color:var(--ink)}
+@keyframes navIn{from{opacity:0;transform:translateX(-8px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes chipPop{0%{transform:scale(.7) rotate(-14deg)}60%{transform:scale(1.12) rotate(3deg)}100%{transform:none}}
+body.inapp .side .nl.on.pop{animation:navIn .34s cubic-bezier(.2,.8,.2,1)}
+body.inapp .side .nl.on.pop .ni{animation:chipPop .5s cubic-bezier(.3,1.4,.5,1)}
+@media(prefers-reduced-motion:reduce){body.inapp .side .nl.on.pop,body.inapp .side .nl.on.pop .ni{animation:none}}
+body.inapp .dc.dc-coral{background:var(--grad);color:#fff}
+body.inapp .bar{background:linear-gradient(to bottom,color-mix(in srgb,var(--bg) 88%,transparent),transparent);backdrop-filter:none}

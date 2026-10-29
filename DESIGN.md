@@ -1,6 +1,6 @@
 # DESIGN.md — Vínculo (área logada: administrador, recrutador e empresa cliente)
 
-Versão 3. Direção: **"calmo, claro e com vida"**. Fundo cinza-claro, cartões brancos bem arredondados, um único cartão preto como destaque, um acento coral e muito espaço. Referência visual: o estudo de caso de dashboard enviado pelo cliente (vídeo "Menu – Leadora"). Adaptamos a linguagem (estrutura, forma, cor, tipografia); não copiamos marca, logo, textos nem ilustrações. A marca Vínculo (nome e anéis) é mantida.
+Versão 4. Direção: **"calmo, claro e com vida"**. Fundo cinza-claro, cartões brancos bem arredondados, um único cartão preto como destaque, um acento coral e muito espaço. Referência visual: o estudo de caso de dashboard enviado pelo cliente (vídeo "Menu – Leadora"). Adaptamos a linguagem (estrutura, forma, cor, tipografia); não copiamos marca, logo, textos nem ilustrações. A marca Vínculo (nome e anéis) é mantida.
 
 Escopo: tudo que usa o menu lateral (`body.inapp`). Site público, login e área do candidato mantêm o visual atual até decisão contrária.
 
@@ -49,8 +49,14 @@ Escala de 4 px (4, 8, 12, 16, 20, 24, 32, 48). Cartões com 20–24 px de respir
 - **Gráficos**: barras e linhas em coral; segunda série em lilás; verde para variação positiva.
 - **Tabelas**: dentro de cartão branco, linhas separadas por divisória clara, sem grade.
 
+## Translucidez (premium)
+- Fundo da página com "aurora": três manchas suaves (coral, lilás e azul) sobre o cinza-claro (ou sobre o quase-preto no escuro), fixas ao rolar.
+- Cartões, tabelas, menu e botões redondos usam vidro: `--glass` (branco 66% no claro, branco 5,5% no escuro), borda de 1 px clara e sombra suave com brilho na borda de cima. Desfoque (`blur`) só no modal e na barra superior, onde há conteúdo passando por trás; o resto não precisa e fica mais leve.
+- Cartão de destaque: grafite-índigo em degradê (no lugar do preto chapado) e cartão coral em degradê com sombra colorida.
+- Campos de formulário continuam quase opacos (80%) para leitura.
+
 ## Menu lateral
-- Itens agrupados por tarefa: Recrutamento, Análise, Comunicação e Administração. Cada ícone fica num quadradinho colorido (coral, azul, lilás, verde, amarelo); o item ativo vira pílula preta com o ícone em gradiente coral.
+- Itens agrupados por tarefa: Recrutamento, Análise, Comunicação e Administração. Cada ícone fica num quadradinho colorido (coral, azul, lilás, verde, amarelo); o item ativo ganha a cor do seu próprio ícone, em degradê translúcido com contorno fino e brilho suave (nada de preto). Ao entrar na página, a pílula desliza e o ícone dá um "pop" curto (0,35 s); só toca ao trocar de página, não ao filtrar, e some com "reduzir movimento".
 - **Recolher/expandir:** botão redondo na borda do menu. Recolhido, vira uma coluna de ícones (96 px) e a área central ganha a largura (até 1560 px). A escolha fica salva no navegador. No celular continua a gaveta.
 - Cartão "Para triar agora" no rodapé do menu, visível em telas altas.
 

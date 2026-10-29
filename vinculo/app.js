@@ -466,12 +466,12 @@ const SideMini = { get() { try { return localStorage.getItem('vinculo_side') ===
 function shell(content) {
   const u = curUser(), n = unreadOf(u), h = location.hash.replace('#', ''); document.body.classList.remove('hasbar');
   if (ui.sideMini === undefined) ui.sideMini = SideMini.get();
-  const mini = !!ui.sideMini, tt = l => mini ? ` title="${l}"` : '';
+  const mini = !!ui.sideMini, tt = l => mini ? ` title="${l}"` : '', fresh = ui.navPrev !== h; ui.navPrev = h;
   const chip = ic => `<span class="ni" data-c="${NAVC[ic] || 'coral'}">${ico(ic, 18)}</span>`;
-  const nl = (href, ic, label, badge) => `<a class="nl ${h === href || (href.length > 4 && h.startsWith(href + '/')) ? 'on' : ''}" href="#${href}" data-act="closeSide" data-label="${label}"${tt(label)}>${chip(ic)}<span class="lbl grow">${label}</span>${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`;
+  const nl = (href, ic, label, badge) => { const on = h === href || (href.length > 4 && h.startsWith(href + '/')); return `<a class="nl ${on ? 'on' : ''} ${on && fresh ? 'pop' : ''}" data-c="${NAVC[ic] || 'coral'}" href="#${href}" data-act="closeSide" data-label="${label}"${tt(label)}>${chip(ic)}<span class="lbl grow">${label}</span>${badge ? `<span class="cnt">${badge}</span>` : ''}</a>`; };
   const grp = t => `<div class="grp"><span class="lbl">${t}</span></div>`;
   const inInd = h.startsWith('/s/indicadores'), indOpen = ui.indOpen === false ? false : (ui.indOpen || inInd);
-  const indMenu = isStaff(u) ? `<button type="button" class="nl nlp ${inInd ? 'on' : ''}" data-act="indToggle" aria-expanded="${indOpen}" data-label="Indicadores"${tt('Indicadores')}>${chip('trend')}<span class="lbl grow">Indicadores</span><span class="chev ${indOpen ? 'open' : ''}">${ico('right', 14)}</span></button>` + (indOpen ? `<div class="nlsub">${IND_SUBS.map(x => { const href = '/s/indicadores/' + x[0]; return `<a class="nl sub ${h === href || (x[0] === 'geral' && h === '/s/indicadores') ? 'on' : ''}" href="#${href}" data-act="closeSide">${x[0] === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : x[1]}</a>`; }).join('')}</div>` : '') : '';
+  const indMenu = isStaff(u) ? `<button type="button" class="nl nlp ${inInd ? 'on' : ''} ${inInd && fresh ? 'pop' : ''}" data-c="coral" data-act="indToggle" aria-expanded="${indOpen}" data-label="Indicadores"${tt('Indicadores')}>${chip('trend')}<span class="lbl grow">Indicadores</span><span class="chev ${indOpen ? 'open' : ''}">${ico('right', 14)}</span></button>` + (indOpen ? `<div class="nlsub">${IND_SUBS.map(x => { const href = '/s/indicadores/' + x[0]; return `<a class="nl sub ${h === href || (x[0] === 'geral' && h === '/s/indicadores') ? 'on' : ''}" href="#${href}" data-act="closeSide">${x[0] === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : x[1]}</a>`; }).join('')}</div>` : '') : '';
   let links, card;
   if (u.role === 'client') {
     links = nl('/e/painel', 'home', 'Meu painel') + nl('/e/solicitar', 'plus', 'Solicitar vaga') + nl('/e/notificacoes', 'bell', 'Notificações', n);
