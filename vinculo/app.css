@@ -610,7 +610,6 @@ body.inapp .side .me{margin:0;padding:10px 4px 0;border-top:1px solid var(--line
 .djobs li{margin:0}.djobs a{display:block;padding:12px 14px;border-radius:16px;background:var(--card2);color:var(--ink)!important;text-decoration:none!important;transition:transform .15s}.djobs a:hover{transform:translateY(-2px)}
 .dact{gap:0}.dact li{padding:11px 0;border-bottom:1px solid var(--line)}.dact li:last-child{border-bottom:0}
 .dact .dot{width:9px;height:9px;border-radius:50%;background:var(--coral);flex:none}
-body.inapp .themerow{display:none}
 .sidecard{padding:14px 16px;gap:4px}.sidecard .sc-n{font-size:32px}
 @media(max-height:1000px){body.inapp .sidecard{display:none}}
 @media(min-width:1000px){.app.mini .side a.nl,.app.mini .side button.nl{width:46px;height:46px;border-radius:16px}}
@@ -666,3 +665,10 @@ body.inapp .side .nl.on.pop .ni{animation:chipPop .5s cubic-bezier(.3,1.4,.5,1)}
 @media(prefers-reduced-motion:reduce){body.inapp .side .nl.on.pop,body.inapp .side .nl.on.pop .ni{animation:none}}
 body.inapp .dc.dc-coral{background:var(--grad);color:#fff}
 body.inapp .bar{background:linear-gradient(to bottom,color-mix(in srgb,var(--bg) 88%,transparent),transparent);backdrop-filter:none}
+/* seletor de aparência (Claro / Escuro / Auto) de volta no menu */
+body.inapp .themerow{display:block;padding:2px 2px 10px}
+body.inapp .themerow .seg{display:flex;padding:3px;border-radius:99px;background:color-mix(in srgb,var(--card2) 70%,transparent);border:1px solid var(--glass-line)}
+body.inapp .themerow .seg button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 4px;font-size:12px;border:0;border-radius:99px;background:transparent;color:var(--mut);font-weight:500}
+body.inapp .themerow .seg button[aria-pressed=true]{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 2px 8px -3px rgba(15,15,20,.25)}
+.minitheme{display:none}
+@media(min-width:1000px){.app.mini .themerow{display:none}.app.mini .minitheme{display:flex;justify-content:center;padding-bottom:8px}}

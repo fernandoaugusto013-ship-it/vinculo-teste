@@ -68,3 +68,6 @@ Mesmo conjunto de ícones de traço (1.8 px) já usado. Fotos só nas páginas p
 
 ## Evitar
 Gradientes roxo/azul, vidro fosco em tudo, cartões idênticos repetidos sem hierarquia, mais de um acento, texto cinza abaixo de 4.5:1.
+
+## Aparência (v5)
+Seletor Claro / Escuro / Auto restaurado no rodapé do menu lateral; no menu reduzido aparece um botão único de alternância. O botão da barra superior continua disponível.
