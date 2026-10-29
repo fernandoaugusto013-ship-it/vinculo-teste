@@ -774,3 +774,38 @@ body.lp .foot2-in{max-width:1280px;background:var(--card);border:1px solid var(-
 @media(prefers-reduced-motion:reduce){.lp-bg img,.lp-in>*,.lp-feat{animation:none}}
 body.lp .top .logo,body.lp .top a.logo{color:#fff!important}
 body.lp .band{background:#0d0d0f;color:#fff;border:1px solid var(--line)}body.lp .band .btn.ghostl{color:#fff;border-color:rgba(255,255,255,.35)}
+
+/* ===== v7: mesmo estilo em Vagas, Para empresas e Entrar ===== */
+.lp-ph{min-height:clamp(460px,64vh,620px)}
+.lp-ph .lp-in{padding:150px 24px 64px}
+.lp-ph .lp-in h1{font-size:clamp(38px,6vw,78px)}
+.lp-kw{position:relative;display:block;width:min(560px,100%);margin-top:30px}
+.lp-kw .ic{position:absolute;left:20px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.75);pointer-events:none}
+.lp-kw input{width:100%;min-height:56px;padding:0 22px 0 52px;border-radius:99px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.26);color:#fff;font:400 16px var(--fd);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:none}
+.lp-kw input::placeholder{color:rgba(255,255,255,.68)}
+.lp-kw input:focus{outline:0;border-color:#fff;background:rgba(255,255,255,.18)}
+body.lp details.fx{border-radius:28px;padding:0 22px;box-shadow:var(--shadow)}
+body.lp details.fx summary{padding:18px 0}
+body.lp .empty{border-radius:28px}
+body.lp .lp-sec>.mb{margin-bottom:22px}
+/* Entrar */
+.lp-authhero{min-height:100svh;justify-content:center}
+body.lp .auth{background:none;min-height:0;width:100%;padding:130px 24px 56px}
+body.lp .auth-in{max-width:1080px;animation:rise .9s cubic-bezier(.2,.7,.2,1) both}
+body.lp .auth-card{border-radius:36px;padding:clamp(26px,3.6vw,46px);background:color-mix(in srgb,var(--card) 95%,transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-color:rgba(255,255,255,.25);box-shadow:0 30px 80px -30px rgba(0,0,0,.6)}
+body.lp .auth-card h1{font:300 clamp(38px,4.6vw,56px)/1 var(--fd);letter-spacing:-.045em}
+body.lp .auth .gbtn{border-radius:99px}
+body.lp .auth input{border-radius:16px}
+body.lp .auth .btn.block.lg{border-radius:99px;background:var(--ink);color:var(--bg);border-color:transparent}
+body.lp .auth-demo{color:#fff}
+body.lp .auth-demo .eyebrow{color:#fff}
+body.lp .auth-demo h2{font:300 clamp(30px,3.6vw,44px)/1.04 var(--fd);letter-spacing:-.045em;color:#fff}
+body.lp .auth-demo .mut{color:rgba(255,255,255,.76)}
+body.lp .demo-list{border:0;display:grid;gap:10px;margin-top:22px}
+body.lp .demo-row{border:1px solid rgba(255,255,255,.18);border-radius:22px;background:rgba(255,255,255,.09);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;padding:14px 16px}
+body.lp .demo-row:hover{background:rgba(255,255,255,.18);padding-left:16px}
+body.lp .demo-tx span{color:rgba(255,255,255,.72)}
+body.lp .demo-go{color:rgba(255,255,255,.72)}body.lp .demo-row:hover .demo-go{color:#fff}
+body.lp .demo-av{color:#fff;background:color-mix(in srgb,var(--c) 60%,rgba(0,0,0,.25))}
+@media(max-width:879px){body.lp .auth{padding-top:110px}}
+body.lp .auth-card{color:var(--ink)}body.lp .auth-card h1{color:var(--ink)}

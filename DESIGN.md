@@ -74,3 +74,6 @@ Seletor Claro / Escuro / Auto restaurado no rodapé do menu lateral; no menu red
 
 ## Página inicial (v6)
 Hero imersivo em tela cheia (foto + véu escuro), título leve (Inter Tight 300, -0.05em), cabeçalho em vidro translúcido, 4 cartões de vidro, seções em caixas de 40px de raio, passos numerados com barra de progresso, FAQ em acordeão e rodapé em caixa. Escopo: apenas a rota "#/" (classe body.lp). Painéis e demais páginas públicas não mudam.
+
+## Páginas públicas (v7)
+O estilo da página inicial foi levado a Vagas, Para empresas e Entrar (hero com foto + vidro, caixas de 40px, rodapé em caixa). Painéis (admin, recrutador, empresa, candidato) não mudam. Outras páginas públicas (detalhe da vaga, cadastro, termos) seguem o visual anterior.

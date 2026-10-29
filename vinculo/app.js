@@ -515,12 +515,15 @@ const jobCard = j => {
 };
 const jobsResults = () => { const l = db.jobs.filter(j => j.status === 'open' && jobMatch(j, ui.jobs)); return `<p class="mut sm mb">${l.length} ${l.length === 1 ? 'vaga encontrada' : 'vagas encontradas'}</p>${l.length ? `<div class="jgrid">${l.map(jobCard).join('')}</div>` : '<div class="empty">Nenhuma vaga com esses filtros. Tente ampliar a busca ou <a href="#" data-act="clearJobs">limpar filtros</a>.</div>'}`; };
 function jobsPublic() {
+  lpFont();
   const f = ui.jobs, open = db.jobs.filter(j => j.status === 'open');
   const L = (n, ph, arr) => `<label class="field"><span>${ph}</span><select name="${n}" data-live="jobs">${opts(arr, f[n], 'Todos')}</select></label>`;
-  return pub(`<section class="pagehero"><div class="wrapc" style="padding-bottom:30px"><span class="eyebrow">Vagas</span><h2>Encontre sua próxima oportunidade</h2><p>Escolha uma vaga e candidate-se em poucos minutos. Seu perfil fica guardado para as próximas oportunidades.</p></div></section><main class="wrapc">
-  <div class="card tight mb"><label class="field"><span>Buscar por palavra-chave</span><input name="q" type="search" data-live="jobs" value="${esc(f.q || '')}" placeholder="Ex.: vendas, Excel, analista, Recife"></label></div>
+  const html = pub(`<section class="lp-hero lp-ph"><div class="lp-bg"><img src="vinculo/img/humano.jpg" alt="" width="2400" height="1792"></div><div class="lp-in"><span class="lp-badge">${ico('brief', 14)} ${open.length} ${open.length === 1 ? 'vaga aberta' : 'vagas abertas'}</span><h1>Encontre sua próxima <span class="dim">oportunidade.</span></h1><p class="lp-lead">Escolha uma vaga e candidate-se em poucos minutos. Seu perfil fica guardado para as próximas oportunidades.</p>
+  <label class="lp-kw">${ico('search', 18)}<input name="q" type="search" data-live="jobs" value="${esc(f.q || '')}" placeholder="Ex.: vendas, Excel, analista, Recife" aria-label="Buscar por palavra-chave"></label></div></section>
+  <div class="lp-wrap"><main class="lp-sec">
   <details class="fx mb" ${Object.keys(f).some(k => k !== 'q' && f[k]) ? 'open' : ''}><summary>Filtros</summary><div class="filters">${L('title', 'Cargo', uniq(open.map(j => j.title)).sort())}${L('area', 'Área', uniq(open.map(j => j.area)).sort())}${L('city', 'Cidade', uniq(open.map(j => j.city)).sort())}${L('state', 'Estado', uniq(open.map(j => j.state)).sort())}${L('mode', 'Modalidade', MODES)}${L('sal', 'Faixa salarial', SAL_OPTS)}${L('contract', 'Tipo de contratação', CONTRACTS)}</div></details>
-  <div id="jobs-res">${jobsResults()}</div></main>`);
+  <div id="jobs-res">${jobsResults()}</div></main></div>`);
+  document.body.classList.add('lp'); return html;
 }
 /* ---------- Link público da vaga e divulgação ---------- */
 const jobUrl = id => location.href.split('#')[0] + '#/vaga/' + id;
@@ -633,15 +636,17 @@ function landing() {
   <section class="lp-sec"><div class="band lp-rv"><span class="eyebrow" style="color:var(--sun)">Para empresas</span><h2 style="margin-top:10px">Precisa contratar? A gente encontra as pessoas certas.</h2><p>Recrutamento e seleção sob medida, com acesso ao nosso banco de talentos e acompanhamento de cada etapa.</p><div class="flex gap wrap mt"><a class="btn coral lg" href="#/para-empresas">Quero contratar</a><a class="btn ghostl lg" href="#/entrar">Acessar demonstração</a></div></div></section></div>`);
   document.body.classList.add('lp'); return html;
 }
+const lpStp = (n, t, tag, d, ic, pct) => `<div class="lp-step lp-rv"><div class="lp-sh"><span class="lp-si">${ico(ic, 20)}</span><div><b>${n}. ${t}</b><small>${tag}</small></div></div><p>${d}</p><i class="lp-bar"><u style="width:${pct}%"></u></i></div>`;
 function bizPage() {
+  lpFont();
   const talents = db.cands.filter(c => !c.deleted).length;
-  return pub(`<section class="h-hero"><div class="h-in"><div class="reveal"><span class="eyebrow">Para empresas</span><h1>Encontre os profissionais certos para sua empresa.</h1><p class="h-lead">Conte o que você precisa. Nossos recrutadores cuidam da triagem, das entrevistas e da comunicação — você só avalia quem realmente faz sentido.</p>
-  <div class="flex gap wrap"><a class="btn coral lg" href="#/entrar?next=%2Fe%2Fsolicitar">Solicitar recrutamento</a><a class="btn lg" href="https://wa.me/5581996457989?text=Ol%C3%A1!%20Quero%20falar%20com%20um%20especialista%20em%20recrutamento." target="_blank" rel="noopener">Falar com especialista</a></div></div>
-  <div class="h-art reveal d2"><div class="h-photo" style="aspect-ratio:4/3;border-radius:120px 32px 32px 32px"><img src="vinculo/img/empresas.jpg" alt="Equipe diversa colaborando em frente a um quadro" width="1280" height="960"></div><div class="float f2"><span class="dotg"></span><div><b>${talents} talentos</b><div class="xs mut">prontos no banco</div></div></div></div></div></section>
-  <section class="sec"><div class="sec-h"><div><span class="eyebrow">Como trabalhamos</span><h2>Um processo claro, do briefing à contratação</h2></div></div><div class="steps">
-  <div class="step"><h3>Solicite a vaga</h3><p>Pela sua área, em poucos campos.</p></div><div class="step"><h3>Buscamos e triamos</h3><p>Banco de talentos, divulgação e análise com IA.</p></div><div class="step"><h3>Você avalia</h3><p>Só os candidatos encaminhados, com um clique para responder.</p></div><div class="step"><h3>Contratação</h3><p>Acompanhamos até o fechamento.</p></div></div></section>
-  <section class="sec"><div class="split"><div><img src="vinculo/img/humano.jpg" alt="Recrutadora em entrevista acolhedora" loading="lazy"></div><div><span class="eyebrow">Por que o Vínculo</span><h2 style="font-size:clamp(26px,3.6vw,40px);margin-top:10px">Entendemos de pessoas — e do seu negócio.</h2>
-  <ul class="ticks"><li>Banco de talentos pesquisável e sempre atualizado</li><li>Pipeline transparente em tempo real</li><li>Dados pessoais compartilhados só quando necessário (LGPD)</li><li>Recrutadores dedicados ao seu segmento</li></ul><a class="btn pri lg" href="#/entrar?next=%2Fe%2Fsolicitar">Encontrar talentos</a></div></div></section>`);
+  const html = pub(`<section class="lp-hero lp-ph"><div class="lp-bg"><img src="vinculo/img/empresas.jpg" alt="" width="2400" height="1792"></div><div class="lp-in"><span class="lp-badge">${ico('building', 14)} Para empresas</span><h1>Encontre os profissionais certos <span class="dim">para sua empresa.</span></h1><p class="lp-lead">Conte o que você precisa. Nossos recrutadores cuidam da triagem, das entrevistas e da comunicação — você só avalia quem realmente faz sentido.</p>
+  <div class="lp-cta"><a class="lp-btn w" href="#/entrar?next=%2Fe%2Fsolicitar">Solicitar recrutamento</a><a class="lp-btn g" href="https://wa.me/5581996457989?text=Ol%C3%A1!%20Quero%20falar%20com%20um%20especialista%20em%20recrutamento." target="_blank" rel="noopener">Falar com especialista</a></div><span class="lp-priv">${ico('users', 12)} ${talents} talentos prontos no banco</span></div></section>
+  <div class="lp-wrap"><section class="lp-sec"><div class="lp-box"><span class="lp-eb">${ico('kanban', 14)} Como trabalhamos</span><h2 class="lp-h">Um processo claro, do briefing à contratação.</h2>
+  <div class="lp-steps">${lpStp('01', 'Solicite a vaga', 'Solicitação', 'Pela sua área, em poucos campos.', 'inbox', 25)}${lpStp('02', 'Buscamos e triamos', 'Triagem', 'Banco de talentos, divulgação e análise com IA.', 'search', 50)}${lpStp('03', 'Você avalia', 'Avaliação', 'Só os candidatos encaminhados, com um clique para responder.', 'users', 75)}${lpStp('04', 'Contratação', 'Fechamento', 'Acompanhamos até o fechamento.', 'star', 100)}</div></div></section>
+  <section class="lp-sec"><div class="lp-split lp-rv"><div class="lp-img"><img src="vinculo/img/humano.jpg" alt="Recrutadora em entrevista acolhedora" loading="lazy"></div><div><span class="lp-eb">${ico('user', 14)} Por que o Vínculo</span><h2 class="lp-h m">Entendemos de pessoas — e do seu negócio.</h2>
+  <ul class="ticks"><li>Banco de talentos pesquisável e sempre atualizado</li><li>Pipeline transparente em tempo real</li><li>Dados pessoais compartilhados só quando necessário (LGPD)</li><li>Recrutadores dedicados ao seu segmento</li></ul><a class="lp-btn d" href="#/entrar?next=%2Fe%2Fsolicitar">Encontrar talentos</a></div></div></section></div>`);
+  document.body.classList.add('lp'); return html;
 }
 const DEMO = [['Administrador', 'admin@vinculo.demo', 'Gerencia empresas, vagas, usuários e LGPD'], ['Recrutador', 'recrutador@vinculo.demo', 'Pipeline, triagem e banco de talentos'], ['Empresa cliente', 'empresa@grupomare.demo', 'Grupo Maré Alimentos: avalia candidatos'], ['Candidato', 'marina.souza@email.demo', 'Marina Souza: perfil e candidaturas']];
 /* ---------- Login com Google (DEMONSTRAÇÃO) ----------
@@ -666,12 +671,14 @@ function googleContinue(name, email, next) {
 const googleBanner = () => `<div class="note mb" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:space-between"><span>${G_LOGO.replace('width="20" height="20"', 'width="16" height="16" style="vertical-align:-3px"')} Conectado com Google (demonstração): <b>${esc(ui.google.email)}</b>. Falta pouco: complete seus dados.</span><a href="#" data-act="googleCancel">Usar outro e-mail</a></div>`;
 function loginView(next) {
   const roleC = { Administrador: 'var(--coral)', Recrutador: 'var(--pri)', 'Empresa cliente': 'var(--blue)', Candidato: 'var(--lilac)' };
-  return pub(`<main class="auth"><div class="auth-in"><section class="auth-card"><h1>Entrar</h1><p class="auth-sub">Acesse sua conta para acompanhar vagas, candidaturas e processos.</p>${googleBtn(next)}<div class="orsep"><span>ou use e-mail e senha</span></div>
+  lpFont();
+  const html = pub(`<section class="lp-hero lp-authhero"><div class="lp-bg"><img src="vinculo/img/hero.jpg" alt="" width="1856" height="2304"></div><main class="auth"><div class="auth-in"><section class="auth-card"><h1>Entrar</h1><p class="auth-sub">Acesse sua conta para acompanhar vagas, candidaturas e processos.</p>${googleBtn(next)}<div class="orsep"><span>ou use e-mail e senha</span></div>
   <form data-form="login" class="stack"><input type="hidden" name="next" value="${esc(next || '')}">
   ${fld('E-mail', inp('email', '', { type: 'email', req: 1, ph: 'voce@email.com', attrs: 'autocomplete="username"' }))}${fld('Senha', inp('pass', '', { type: 'password', req: 1, attrs: 'autocomplete="current-password"' }))}<button class="btn pri block lg">Entrar</button></form>
   <p class="sm mut auth-foot">Ainda não tem conta? <a href="#/cadastro${next && next.startsWith('/') ? '?next=' + encodeURIComponent(next) : ''}">Criar perfil de candidato</a></p></section>
   <aside class="auth-demo"><span class="eyebrow">Demonstração</span><h2>Entre com uma conta de exemplo</h2><p class="sm mut">Um clique para explorar cada perfil. Senha de todas: <span class="mono">demo123</span></p>
-  <div class="demo-list">${DEMO.map(d => `<button type="button" class="demo-row" data-act="demoLogin" data-email="${d[1]}"><span class="demo-av" style="--c:${roleC[d[0]] || 'var(--pri)'}">${esc(d[0].charAt(0))}</span><span class="demo-tx"><b>${d[0]}</b><span>${d[2]}</span><span class="mono">${d[1]}</span></span><span class="demo-go">${ico('right', 16)}</span></button>`).join('')}</div></aside></div></main>`);
+  <div class="demo-list">${DEMO.map(d => `<button type="button" class="demo-row" data-act="demoLogin" data-email="${d[1]}"><span class="demo-av" style="--c:${roleC[d[0]] || 'var(--pri)'}">${esc(d[0].charAt(0))}</span><span class="demo-tx"><b>${d[0]}</b><span>${d[2]}</span><span class="mono">${d[1]}</span></span><span class="demo-go">${ico('right', 16)}</span></button>`).join('')}</div></aside></div></main></section>`);
+  document.body.classList.add('lp'); return html;
 }
 function registerView() {
   const u = curUser(); if (u && u.role === 'candidate') { go('/c/perfil'); return ''; }
