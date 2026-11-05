@@ -1683,6 +1683,54 @@ function backfillActorIds() {
   db.evals.forEach(e => { if (e.byId === undefined) e.byId = idOf(e.by); });
 }
 
+const GOAL_METRICS = {
+  hires: { label: 'Contratações', unit: '', dir: 'up' },
+  fill: { label: 'Tempo médio de fechamento', unit: 'dias', dir: 'down' },
+  resp: { label: 'Tempo da 1ª resposta', unit: 'dias', dir: 'down' },
+  triaged: { label: 'Candidatos triados', unit: '', dir: 'up' },
+  interviews: { label: 'Entrevistas de RH agendadas', unit: '', dir: 'up' },
+  invites: { label: 'Convites do banco de talentos', unit: '', dir: 'up' },
+  evals: { label: 'Avaliações registradas', unit: '', dir: 'up' },
+  clientOk: { label: 'Aprovação pelo cliente', unit: '%', dir: 'up' },
+  stuck: { label: 'Vagas paradas (7 dias ou mais)', unit: 'vagas', dir: 'down' }
+};
+const GOAL_COUNT = ['hires', 'triaged', 'interviews', 'invites', 'evals'];
+const toDate = d => d instanceof Date ? d : new Date(d);
+const monthKey = d => { d = toDate(d); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); };
+function periodBounds(period, ref) {
+  const r = ref ? toDate(ref) : new Date(), day = new Date(r.getFullYear(), r.getMonth(), r.getDate());
+  if (period === 'day') return { start: day, end: new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1) };
+  if (period === 'week') { const off = (day.getDay() + 6) % 7, st = new Date(day.getFullYear(), day.getMonth(), day.getDate() - off); return { start: st, end: new Date(st.getFullYear(), st.getMonth(), st.getDate() + 7) }; }
+  return { start: new Date(r.getFullYear(), r.getMonth(), 1), end: new Date(r.getFullYear(), r.getMonth() + 1, 1) };
+}
+function goalMetricValue(metric, userId, start, end) {
+  const a = toDate(start), b = toDate(end), jobs = db.jobs.filter(j => j.recruiterId === userId && j.status !== 'draft');
+  const acts = stage => db.apps.reduce((n, x) => n + x.history.filter(h => h.stage === stage && h.byId === userId && inR(h.date, a, b)).length, 0);
+  if (metric === 'hires') return indMetrics(jobs, a, b).hires;
+  if (metric === 'fill') return indMetrics(jobs, a, b).fill;
+  if (metric === 'resp') return indMetrics(jobs, a, b).resp;
+  if (metric === 'triaged') return acts('triagem');
+  if (metric === 'interviews') return acts('entrevista_rh');
+  if (metric === 'invites') return db.invites.filter(i => i.by === userId && inR(i.date, a, b)).length;
+  if (metric === 'evals') return db.evals.filter(e => e.byId === userId && inR(e.date, a, b)).length;
+  if (metric === 'clientOk') {
+    const ids = new Set(jobs.map(j => j.id)), dec = db.apps.filter(x => ids.has(x.jobId) && (x.clientDecision === 'advance' || x.clientDecision === 'reject') && inR(((x.clientFeedback || [])[0] || {}).date || (x.history[x.history.length - 1] || {}).date || x.date, a, b));
+    return dec.length < 5 ? null : Math.round(100 * dec.filter(x => x.clientDecision === 'advance').length / dec.length);
+  }
+  if (metric === 'stuck') return jobs.filter(j => j.status === 'open').map(jobStats).filter(s => s.idle >= 7).length;
+  return null;
+}
+function suggestTarget(metric, userId, period) {
+  period = period || 'month'; const now = new Date(), v = goalMetricValue(metric, userId, new Date(now.getTime() - 90 * 864e5), new Date(now.getTime() + 864e5));
+  if (v == null || (v === 0 && metric !== 'stuck')) return { value: 0, base: null };
+  const days = { day: 1, week: 7, month: 30 }[period], isCount = GOAL_COUNT.includes(metric), base = isCount ? Math.round(v / (90 / days) * 10) / 10 : v;
+  const dir = GOAL_METRICS[metric].dir, raw = base * (dir === 'up' ? 1.1 : 0.9);
+  let value = isCount || metric === 'clientOk' || metric === 'stuck' ? Math.round(raw) : Math.round(raw * 10) / 10;
+  if (dir === 'up' && base > 0 && value < 1) value = 1;
+  if (metric === 'clientOk') value = Math.min(100, value);
+  return { value, base };
+}
+
 const actions = {
   googleSignIn(t) {
     const next = t.dataset.next || '';
@@ -2150,5 +2198,5 @@ ensureGoalsDb(); backfillActorIds();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget } };
 })();
