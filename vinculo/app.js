@@ -1847,9 +1847,18 @@ function metasRecruiter(u) {
     body = `<p class="sm mut mb">Metas definidas pela administração para o mês. Somente leitura.</p>` + (l.length ? `<div class="gl-grid">${l.map(g => goalCard(g)).join('')}</div>` : '<div class="empty">Nenhuma meta atribuída para este mês.</div>');
   } else {
     const l = cur.filter(g => g.origin === 'self');
-    body = `<p class="sm mut mb">Metas criadas por você. Só você enxerga esta lista.</p>` + (l.length ? `<div class="gl-grid">${l.map(g => goalCard(g, { edit: true })).join('')}</div>` : '<div class="empty">Você ainda não criou metas pessoais.</div>');
+    body = `<div class="flex between gap wrap mb"><p class="sm mut" style="margin:0">Metas criadas por você. Só você enxerga esta lista.</p><button type="button" class="btn pri sm" data-act="goalNew">${ico('plus', 14)} Nova meta pessoal</button></div>` + (l.length ? `<div class="gl-grid">${l.map(g => goalCard(g, { edit: true })).join('')}</div>` : '<div class="empty">Você ainda não criou metas pessoais.</div>');
   }
   return shell(pageHead('Minhas metas', 'Acompanhe suas metas do período e o que ainda falta alcançar.') + `<div class="flex gap wrap mb gl-tabs" role="group" aria-label="Seções de metas">${tabs}</div>` + body);
+}
+function goalSelfModal(g) {
+  const metricOpts = [['', 'Meta livre (eu atualizo o contador)']].concat(Object.keys(GOAL_METRICS).map(k => [k, GOAL_METRICS[k].label]));
+  openModal(g ? 'Editar meta pessoal' : 'Nova meta pessoal', `<form data-form="goalSelf"><input type="hidden" name="id" value="${g ? g.id : ''}">
+  ${fld('Nome da meta', inp('title', g ? g.title : '', { ph: 'Ex.: Ligar para 5 candidatos', attrs: 'maxlength="80"' }), g && g.metric ? '' : '(obrigatório para meta livre)')}
+  <div class="g2">${fld('Período', sel('period', [['day', 'Diária'], ['week', 'Semanal'], ['month', 'Mensal']], g ? g.period : 'day', null, g ? 'disabled' : ''))}
+  ${fld('Medir por', sel('metric', metricOpts, g ? g.metric || '' : '', null, g ? 'disabled' : ''))}</div>
+  ${fld('Valor da meta', inp('target', g ? g.target : '', { type: 'number', req: true, attrs: 'min="0" step="any" inputmode="decimal"' }))}
+  <div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Salvar meta</button></div></form>`);
 }
 function metasAdmin(u) { return shell(pageHead('Metas da equipe', 'Atribua metas mensais às recrutadoras.')); }
 function metasView() {
@@ -1861,6 +1870,11 @@ function metasView() {
 
 const actions = {
   metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
+  goalNew() { goalSelfModal(null); },
+  goalEdit(t) { const g = goalsFor(curUser()).find(x => x.id === t.dataset.id && x.origin === 'self'); if (g) goalSelfModal(g); },
+  goalDel(t) { const g = goalsFor(curUser()).find(x => x.id === t.dataset.id && x.origin === 'self'); if (g) confirmBox('Apagar meta', `Apagar a meta "${esc(goalTitle(g))}"? Esta ação não pode ser desfeita.`, 'Apagar', 'goalDelDo', { id: g.id }, true); },
+  goalDelDo(t) { const r = removeGoal(curUser(), t.dataset.id); closeModal(); toast(r.ok ? 'Meta apagada.' : r.error, !r.ok); render(true); },
+  goalBump(t) { bumpGoal(curUser(), t.dataset.id, +t.dataset.d); render(true); },
   googleSignIn(t) {
     const next = t.dataset.next || '';
     openModal('Escolher uma conta', `<div class="note mb">${ico('shield', 14)} <b>Demonstração:</b> nenhuma conta real do Google é usada. Escolha uma conta de exemplo para ver o fluxo.</div><p class="sm mut mb">Continuar para o <b>Vínculo</b></p><div class="stack-s">${GOOGLE_DEMO_ACCOUNTS.map(([n, e]) => `<button type="button" class="btn block" style="justify-content:flex-start;height:auto;padding:10px 14px;text-align:left" data-act="googlePick" data-name="${esc(n)}" data-email="${esc(e)}" data-next="${esc(next)}">${avatar(n, 34)}<span><b>${esc(n)}</b><br><span class="mut sm" style="font-weight:400">${esc(e)}</span>${db.users.some(x => x.email.toLowerCase() === e) ? ' <span class="badge">já cadastrado</span>' : ''}</span></button>`).join('')}</div>
@@ -2045,6 +2059,11 @@ const actions = {
 
 /* ---------- Formulários (data-form) ---------- */
 const forms = {
+  goalSelf(f) {
+    if (!validate(f)) return; const fd = new FormData(f), r = saveGoal(curUser(), { id: fd.get('id') || undefined, title: fd.get('title'), period: fd.get('period'), metric: fd.get('metric') || null, target: fd.get('target') });
+    if (!r.ok) return toast(r.error, true);
+    closeModal(); toast(fd.get('id') ? 'Meta atualizada.' : 'Meta criada.'); render(true);
+  },
   googleOther(f) { if (!validate(f)) return; const fd = new FormData(f); googleContinue(fd.get('name'), fd.get('email'), f.dataset.next); },
   login(f) {
     const fd = new FormData(f), u = Auth.login(fd.get('email'), fd.get('pass'));
