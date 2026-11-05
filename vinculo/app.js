@@ -462,7 +462,7 @@ function pub(content) {
   <div><h4>Vínculo</h4><a href="#/privacidade">Política de privacidade</a><a href="#/termos">Termos de uso</a><a href="#/entrar">Acesso de demonstração</a></div>
   <div class="bot"><span>© ${new Date().getFullYear()} Vínculo. Seus dados tratados conforme a LGPD.</span><button class="btn ghost sm" data-act="reset">Restaurar dados de demonstração</button></div></div></footer>${bar}`;
 }
-const NAVC = { chart: 'coral', trend: 'coral', brief: 'blue', kanban: 'lilac', users: 'green', search: 'sun', inbox: 'coral', spark: 'lilac', file: 'blue', mail: 'green', bell: 'sun', building: 'blue', user: 'green', tag: 'lilac', shield: 'green', home: 'coral', plus: 'coral' };
+const NAVC = { star: 'sun', chart: 'coral', trend: 'coral', brief: 'blue', kanban: 'lilac', users: 'green', search: 'sun', inbox: 'coral', spark: 'lilac', file: 'blue', mail: 'green', bell: 'sun', building: 'blue', user: 'green', tag: 'lilac', shield: 'green', home: 'coral', plus: 'coral' };
 const SideMini = { get() { try { return localStorage.getItem('vinculo_side') === '1'; } catch (e) { return false; } }, set(v) { try { localStorage.setItem('vinculo_side', v ? '1' : '0'); } catch (e) { } } };
 function shell(content) {
   const u = curUser(), n = unreadOf(u), h = location.hash.replace('#', ''); document.body.classList.remove('hasbar', 'lp');
@@ -480,7 +480,7 @@ function shell(content) {
   } else {
     const reqs = db.requests.filter(r => r.status === 'nova').length;
     links = nl('/s/dashboard', 'chart', 'Tela Principal') + grp('Recrutamento') + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/kanban', 'kanban', 'Kanban') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs)
-      + grp('Análise') + indMenu + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios')
+      + grp('Análise') + indMenu + nl('/s/metas', 'star', 'Metas', u.role === 'recruiter' ? lateGoalsFor(u).length : 0) + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios')
       + grp('Comunicação') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
     if (u.role === 'admin') links += grp('Administração') + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/cargos', 'tag', 'Cargos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
     const act = db.apps.filter(a => !CLOSED.includes(a.stage)), nw = act.filter(a => a.stage === 'novo').length, ok = act.length ? Math.round(100 * (act.length - nw) / act.length) : 100;
@@ -1523,6 +1523,7 @@ function route() {
       switch (b) {
         case 'dashboard': return dashboard();
         case 'indicadores': return indicadoresView(c);
+        case 'metas': return metasView();
         case 'vagas': return jobsAdmin();
         case 'vaga':
           if (c === 'nova') {
@@ -1815,7 +1816,51 @@ function seedGoals(d) {
   G('u_rec1', 'self', null, 'Revisar 10 currículos do banco por semana', 10, 'week', 3, wk); G('u_rec2', 'self', null, 'Fazer 5 contatos de acompanhamento por dia', 5, 'day', 2, periodBounds('day'));
 }
 
+const goalIsCurrent = (g, now) => { now = now || new Date(); return g.status === 'active' && toDate(g.start) <= now && now < toDate(g.end); };
+function lateGoalsFor(u) {
+  if (!u || u.role !== 'recruiter' || u.active === false) return [];
+  return goalsFor(u).filter(g => goalIsCurrent(g) && ['late', 'out'].includes(goalProgress(g).status));
+}
+const GOAL_COLOR = { hit: 'var(--green)', ontrack: 'var(--blue)', late: 'var(--red)', missed: 'var(--red)', within: 'var(--green)', out: 'var(--red)', nodata: 'var(--mut)' };
+const PERIOD_NAME = { day: 'Diária', week: 'Semanal', month: 'Mensal' };
+const goalNum = (v, unit) => v == null ? '—' : (unit === '%' ? v + '%' : unit === 'dias' ? v + (v === 1 ? ' dia' : ' dias') : String(v));
+function goalCard(g, o) {
+  o = o || {}; const p = goalProgress(g), dn = goalDir(g) === 'down', col = GOAL_COLOR[p.status], w = Math.max(0, Math.min(100, dn ? (p.status === 'within' ? 100 : 0) : (p.pct || 0)));
+  const unit = g.metric ? GOAL_METRICS[g.metric].unit : g.unit, left = p.daysLeft === 0 ? 'último dia' : p.daysLeft === 1 ? 'falta 1 dia' : `faltam ${p.daysLeft} dias`;
+  const sub = g.metric ? (g.origin === 'admin' ? 'Atribuída pela administração' : 'Meta pessoal') + ' · ' + PERIOD_NAME[g.period] : 'Meta pessoal · ' + PERIOD_NAME[g.period];
+  const val = p.value == null ? 'Sem dados' : goalNum(p.value, unit);
+  const ctr = o.edit ? `<div class="flex gap wrap mt-s">${!g.metric ? `<button type="button" class="btn sm" data-act="goalBump" data-id="${g.id}" data-d="-1" aria-label="Diminuir 1">−1</button><button type="button" class="btn sm" data-act="goalBump" data-id="${g.id}" data-d="1" aria-label="Aumentar 1">+1</button>` : ''}<button type="button" class="btn sm" data-act="goalEdit" data-id="${g.id}">Editar</button><button type="button" class="btn sm danger" data-act="goalDel" data-id="${g.id}">Apagar</button></div>` : '';
+  return `<article class="card gl-card" data-goal="${g.id}"><div class="flex between gap"><div><b>${esc(goalTitle(g))}</b><div class="xs mut">${esc(sub)}</div></div><span class="badge" style="--c:${col}">${GOAL_STATUS_LABEL[p.status]}</span></div>
+  <div class="gl-nums"><b>${esc(val)}</b><span class="mut"> ${dn ? 'meta: até ' : 'de '}${esc(goalNum(+g.target, unit))}</span></div>
+  <div class="prog gl-prog" role="progressbar" aria-valuenow="${Math.round(w)}" aria-valuemin="0" aria-valuemax="100" aria-label="Progresso da meta"><i style="width:${w}%;--c:${col}"></i>${dn ? '' : `<u class="gl-mark" style="left:${Math.min(100, p.expectedPct)}%" title="Esperado hoje: ${Math.round(p.expectedPct)}%"></u>`}</div>
+  <div class="xs mut mt-s">${dn ? 'Quanto menor, melhor' : `Esperado hoje: ${Math.round(p.expectedPct)}%`} · ${left}</div>${ctr}</article>`;
+}
+function metasRecruiter(u) {
+  const tab = ['acomp', 'atrib', 'pess'].includes(ui.metaTab) ? ui.metaTab : 'acomp', cur = goalsFor(u).filter(g => goalIsCurrent(g)), late = lateGoalsFor(u);
+  const tabs = [['acomp', 'Acompanhamento'], ['atrib', 'Atribuídas'], ['pess', 'Pessoais']].map(t => `<button type="button" class="btn sm ${tab === t[0] ? 'pri' : ''}" data-act="metaTab" data-v="${t[0]}" aria-pressed="${tab === t[0]}">${t[1]}</button>`).join('');
+  let body;
+  if (tab === 'acomp') {
+    body = `<div class="card mb gl-attn ${late.length ? 'bad' : 'ok'}"><h3>Precisa de atenção</h3>${late.length ? `<ul class="gl-list">${late.map(g => { const p = goalProgress(g); return `<li><b>${esc(goalTitle(g))}</b> — ${GOAL_STATUS_LABEL[p.status].toLowerCase()} (${esc(goalNum(p.value, g.metric ? GOAL_METRICS[g.metric].unit : g.unit))} / ${esc(goalNum(+g.target, g.metric ? GOAL_METRICS[g.metric].unit : g.unit))})</li>`; }).join('')}</ul>` : '<p class="mut">Tudo em dia. Nenhuma das suas metas está atrasada.</p>'}</div>`
+      + (cur.length ? `<div class="gl-grid">${cur.map(g => goalCard(g)).join('')}</div>` : '<div class="empty">Você ainda não tem metas neste período.</div>');
+  } else if (tab === 'atrib') {
+    const l = cur.filter(g => g.origin === 'admin');
+    body = `<p class="sm mut mb">Metas definidas pela administração para o mês. Somente leitura.</p>` + (l.length ? `<div class="gl-grid">${l.map(g => goalCard(g)).join('')}</div>` : '<div class="empty">Nenhuma meta atribuída para este mês.</div>');
+  } else {
+    const l = cur.filter(g => g.origin === 'self');
+    body = `<p class="sm mut mb">Metas criadas por você. Só você enxerga esta lista.</p>` + (l.length ? `<div class="gl-grid">${l.map(g => goalCard(g, { edit: true })).join('')}</div>` : '<div class="empty">Você ainda não criou metas pessoais.</div>');
+  }
+  return shell(pageHead('Minhas metas', 'Acompanhe suas metas do período e o que ainda falta alcançar.') + `<div class="flex gap wrap mb gl-tabs" role="group" aria-label="Seções de metas">${tabs}</div>` + body);
+}
+function metasAdmin(u) { return shell(pageHead('Metas da equipe', 'Atribua metas mensais às recrutadoras.')); }
+function metasView() {
+  const u = curUser(); if (!u) return denied();
+  if (u.role === 'recruiter') return metasRecruiter(u);
+  if (u.role === 'admin') return metasAdmin(u);
+  return denied();
+}
+
 const actions = {
+  metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
   googleSignIn(t) {
     const next = t.dataset.next || '';
     openModal('Escolher uma conta', `<div class="note mb">${ico('shield', 14)} <b>Demonstração:</b> nenhuma conta real do Google é usada. Escolha uma conta de exemplo para ver o fluxo.</div><p class="sm mut mb">Continuar para o <b>Vínculo</b></p><div class="stack-s">${GOOGLE_DEMO_ACCOUNTS.map(([n, e]) => `<button type="button" class="btn block" style="justify-content:flex-start;height:auto;padding:10px 14px;text-align:left" data-act="googlePick" data-name="${esc(n)}" data-email="${esc(e)}" data-next="${esc(next)}">${avatar(n, 34)}<span><b>${esc(n)}</b><br><span class="mut sm" style="font-weight:400">${esc(e)}</span>${db.users.some(x => x.email.toLowerCase() === e) ? ' <span class="badge">já cadastrado</span>' : ''}</span></button>`).join('')}</div>
@@ -2282,5 +2327,5 @@ ensureGoalsDb(); backfillActorIds();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent } };
 })();
