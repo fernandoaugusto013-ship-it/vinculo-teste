@@ -394,7 +394,7 @@ function seedDB() {
   N('u_co1', '3 novos candidatos foram encaminhados para sua vaga Analista de RH.', '/e/vaga/j1', 2);
   N('u_co2', 'Um novo candidato foi encaminhado para a vaga Gerente Comercial.', '/e/vaga/j3', 3);
   d.requests.push({ id: 'rq1', companyId: 'co3', title: 'Analista de Suporte N2', area: 'Tecnologia', qty: 2, city: 'Recife', mode: 'Híbrido', salary: '4500 a 6000', notes: 'Atendimento a clientes corporativos, escala 8h às 17h.', date: dAgo(2), status: 'nova' });
-  d.goals = []; d.goalSnaps = []; seedGoals(d);
+  d.goals = []; d.goalSnaps = []; seedGoals(d); seedGoalSnaps(d);
   return d;
 }
 
@@ -903,7 +903,8 @@ const IND_SUBS = [
   ['velocidade', 'Velocidade', 'Quanto tempo o processo leva e onde ele trava.'],
   ['motivos', 'Motivos de saída', 'Por que candidatos são reprovados ou desistem.'],
   ['clientes', 'Clientes', 'Resultado por empresa cliente.'],
-  ['recrutadores', 'Recrutadores', 'Resultado por recrutador.']
+  ['recrutadores', 'Recrutadores', 'Resultado por recrutador.'],
+  ['metas', 'Metas (histórico)', 'Resultado das metas mês a mês.']
 ];
 function indCtx() {
   const u = curUser(), ind = ui.ind = ui.ind || { p: '90d', co: '', rec: '' }, rg = indRange(), staffList = db.users.filter(isStaff);
@@ -930,6 +931,7 @@ function indicadoresView(sub) {
   const u = curUser(), meta = IND_SUBS.find(x => x[0] === sub), title = sub === 'recrutadores' && u.role !== 'admin' ? 'Meus números' : meta[1];
   const head = `<p class="sm mb"><a href="#/s/indicadores/geral">Indicadores</a> / ${esc(title)}</p>${pageHead(esc(title), meta[2])}`;
   if (sub === 'geral') return shell(head + indGeral());
+  if (sub === 'metas') return shell(head + indMetas());
   const c = indCtx(), { ind, rg, cur, prv, scope } = c; let body = '';
   if (sub === 'vagas') {
     const js = db.jobs.filter(j => (!ind.co || j.companyId === ind.co) && (!ind.rec || j.recruiterId === ind.rec)), cnt = s2 => js.filter(j => j.status === s2).length;
@@ -1808,6 +1810,12 @@ function copyMonthGoals(u, fromMonth, toMonth) {
   });
   return n;
 }
+function seedGoalSnaps(d) {
+  const cur = monthKey(new Date()), S = (i, userId, origin, metric, title, target, results) => results.forEach((result, k) => { const unit = metric ? GOAL_METRICS[metric].unit : '', dn = metric && GOAL_METRICS[metric].dir === 'down'; d.goalSnaps.push({ id: uid('gs'), userId, month: shiftMonth(cur, -(k + 1)), goalId: 'demo_' + i + '_' + k, metric, title, target, unit, result, hit: dn ? result <= target : result >= target, origin }); });
+  S(1, 'u_rec1', 'admin', 'hires', GOAL_METRICS.hires.label, 2, [2, 1, 3]); S(2, 'u_rec1', 'admin', 'triaged', GOAL_METRICS.triaged.label, 40, [44, 35, 41]); S(3, 'u_rec1', 'admin', 'stuck', GOAL_METRICS.stuck.label, 0, [0, 2, 1]);
+  S(4, 'u_rec2', 'admin', 'hires', GOAL_METRICS.hires.label, 1, [1, 1, 0]); S(5, 'u_rec2', 'admin', 'resp', GOAL_METRICS.resp.label, 2, [1.8, 2.4, 2.1]); S(6, 'u_rec2', 'admin', 'clientOk', GOAL_METRICS.clientOk.label, 70, [75, 66, 72]);
+  S(7, 'u_rec1', 'self', null, 'Atualizar 20 perfis do banco de talentos', 20, [22, 18, 21]);
+}
 function seedGoals(d) {
   const b = periodBounds('month'), wk = periodBounds('week'), s0 = b.start.toISOString(), e0 = b.end.toISOString();
   const G = (userId, origin, metric, title, target, period, manual, bounds) => d.goals.push({ id: uid('gl'), userId, origin, metric, title: title || GOAL_METRICS[metric].label, target, unit: metric ? GOAL_METRICS[metric].unit : '', period, start: (bounds || b).start.toISOString(), end: (bounds || b).end.toISOString(), manual, createdBy: origin === 'admin' ? 'u_admin' : userId, createdAt: nowISO(), status: 'active' });
@@ -1877,6 +1885,33 @@ function goalAdminModal() {
 function goalBanner(u) {
   const n = lateGoalsFor(u).length; if (!n) return '';
   return `<a class="gl-banner" href="#/s/metas" role="status"><b>${n} ${n === 1 ? 'meta atrasada' : 'metas atrasadas'}</b><span>Veja o que falta para alcançar ${n === 1 ? 'ela' : 'elas'} neste período.</span>${ico('right', 16)}</a>`;
+}
+function closeMonths(now) {
+  now = now ? toDate(now) : new Date(); ensureGoalsDb(); let n = 0;
+  db.goals.filter(g => g.period === 'month' && toDate(g.end) <= now && !db.goalSnaps.some(x => x.goalId === g.id)).forEach(g => {
+    const result = g.metric ? goalMetricValue(g.metric, g.userId, g.start, g.end) : (g.manual || 0), t = +g.target, down = goalDir(g) === 'down';
+    db.goalSnaps.push({ id: uid('gs'), userId: g.userId, month: monthKey(g.start), goalId: g.id, metric: g.metric, title: goalTitle(g), target: t, unit: g.unit || '', result, hit: result != null && (down ? result <= t : result >= t), origin: g.origin }); n++;
+  });
+  if (n) save(); return n;
+}
+function goalHistory(u, months) {
+  months = months || 12; const cur = monthKey(new Date()), out = [];
+  const snaps = !u ? [] : u.role === 'recruiter' ? db.goalSnaps.filter(x => x.userId === u.id) : u.role === 'admin' ? db.goalSnaps.filter(x => x.origin === 'admin') : [];
+  const valid = snaps.filter(x => { const r = by('users', x.userId); return r && r.name !== 'Removido'; });
+  for (let i = 1; i <= months; i++) {
+    const k = shiftMonth(cur, -i), items = valid.filter(x => x.month === k), hit = items.filter(x => x.hit).length;
+    out.push({ month: k, total: items.length, hit, pct: items.length ? Math.round(100 * hit / items.length) : null, items });
+  }
+  return out;
+}
+function indMetas() {
+  const u = curUser(), h = goalHistory(u, 12), adm = u.role === 'admin', tot = h.reduce((a, m) => a + m.total, 0), hit = h.reduce((a, m) => a + m.hit, 0);
+  const sum = tot ? `<div class="kpis mb">${indK('Metas nos últimos 12 meses', tot)}${indK('Atingidas', hit)}${indK('Taxa de atingimento', Math.round(100 * hit / tot) + '%')}</div>` : '';
+  const rows = h.map(m => {
+    const det = m.items.length ? `<div class="tw mt-s"><table><thead><tr>${adm ? '<th>Recrutadora</th>' : ''}<th>Meta</th>${adm ? '' : '<th>Origem</th>'}<th>Alvo</th><th>Resultado</th><th>Situação</th></tr></thead><tbody>${m.items.map(x => { const dn = x.metric && GOAL_METRICS[x.metric].dir === 'down'; return `<tr>${adm ? `<td>${esc(by('users', x.userId).name)}</td>` : ''}<td class="b">${esc(x.title)}</td>${adm ? '' : `<td>${x.origin === 'admin' ? 'Atribuída' : 'Pessoal'}</td>`}<td>${dn ? 'até ' : ''}${esc(goalNum(x.target, x.unit))}</td><td>${x.result == null ? '—' : esc(goalNum(x.result, x.unit))}</td><td><span class="badge" style="--c:${x.hit ? 'var(--green)' : 'var(--red)'}">${x.hit ? (dn ? 'Dentro da meta' : 'Atingida') : (dn ? 'Fora da meta' : 'Não atingida')}</span></td></tr>`; }).join('')}</tbody></table></div>` : '';
+    return `<section class="card mb gl-month"><div class="flex between gap wrap"><b>${esc(ymTxt(m.month))}</b>${m.total ? `<span class="sm"><b>${m.hit}</b> de ${m.total} ${m.total === 1 ? 'meta atingida' : 'metas atingidas'} · ${m.pct}%</span>` : '<span class="sm mut">Sem metas</span>'}</div>${m.total ? `<div class="prog mt-s"><i style="width:${m.pct}%;--c:var(--green)"></i></div>` : ''}${det}</section>`;
+  }).join('');
+  return `<p class="sm mut mb">${adm ? 'Resultado das metas atribuídas por você, mês a mês. Metas pessoais das recrutadoras não aparecem aqui.' : 'Resultado das suas metas, mês a mês, atribuídas e pessoais. Só você vê estes dados.'}</p>${sum}${rows}`;
 }
 function metasAdmin(u) {
   const mk = /^\d{4}-\d{2}$/.test(ui.metaMonth || '') ? ui.metaMonth : monthKey(new Date()), recs = db.users.filter(activeRec);
@@ -2388,9 +2423,9 @@ db = Persist.load();
 if (!db || !db.users || !db.jobs) { db = seedDB(); }
 ['invites', 'requests', 'delReqs', 'audit', 'outbox', 'evals', 'notifs'].forEach(k => { if (!db[k]) db[k] = []; });
 if (!db.cargos) db.cargos = defaultCargos();
-ensureGoalsDb(); backfillActorIds();
+ensureGoalsDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();
