@@ -19,3 +19,6 @@ RANGE30 = "(() => [new Date(Date.now() - 30 * 864e5), new Date(Date.now() + 864e
 
 def val(app, metric, user, wide=False):
     return app.ev("([m, u, w]) => { const d = n => new Date(Date.now() + n * 864e5); return __V.metas.goalMetricValue(m, u, w ? d(-90) : d(-30), d(1)); }", [metric, user, wide])
+
+def call(app, fn, uid, *args):
+    return app.ev("([fn, uid, args]) => { const u = __V.db.users.find(x => x.id === uid); return __V.metas[fn](u, ...args); }", [fn, uid, list(args)])

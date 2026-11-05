@@ -394,6 +394,7 @@ function seedDB() {
   N('u_co1', '3 novos candidatos foram encaminhados para sua vaga Analista de RH.', '/e/vaga/j1', 2);
   N('u_co2', 'Um novo candidato foi encaminhado para a vaga Gerente Comercial.', '/e/vaga/j3', 3);
   d.requests.push({ id: 'rq1', companyId: 'co3', title: 'Analista de Suporte N2', area: 'Tecnologia', qty: 2, city: 'Recife', mode: 'Híbrido', salary: '4500 a 6000', notes: 'Atendimento a clientes corporativos, escala 8h às 17h.', date: dAgo(2), status: 'nova' });
+  d.goals = []; d.goalSnaps = []; seedGoals(d);
   return d;
 }
 
@@ -1749,6 +1750,71 @@ function goalProgress(goal, now) {
   return { value, pct, expectedPct, status, daysLeft };
 }
 
+const activeRec = u => !!u && u.role === 'recruiter' && u.active !== false;
+const isoMonth = key => { const [y, m] = key.split('-').map(Number); return { start: new Date(y, m - 1, 1).toISOString(), end: new Date(y, m, 1).toISOString() }; };
+const goalOriginOf = u => u && u.role === 'admin' ? 'admin' : u && u.role === 'recruiter' ? 'self' : null;
+/* único ponto de leitura de metas: filtra pela sessão */
+function goalsFor(u) {
+  if (!u || !db.goals) return [];
+  if (u.role === 'recruiter') return db.goals.filter(g => g.userId === u.id);
+  if (u.role === 'admin') return db.goals.filter(g => g.origin === 'admin');
+  return [];
+}
+const goalTitle = g => g.title || (g.metric ? GOAL_METRICS[g.metric].label : 'Meta');
+function saveGoal(u, data) {
+  const origin = goalOriginOf(u); if (!origin) return { ok: false, error: 'Sem permissão para esta ação.' };
+  data = data || {}; const own = data.id ? goalsFor(u).find(g => g.id === data.id && g.origin === origin) : null;
+  if (data.id && !own) return { ok: false, error: 'Meta não encontrada.' };
+  const metric = own ? own.metric : (data.metric || null); if (metric && !GOAL_METRICS[metric]) return { ok: false, error: 'Métrica inválida.' };
+  const target = typeof data.target === 'string' && data.target.trim() === '' ? NaN : +data.target, dirUp = !metric || GOAL_METRICS[metric].dir === 'up';
+  if (!isFinite(target) || (dirUp ? target <= 0 : target < 0)) return { ok: false, error: 'Informe um valor válido para a meta' + (dirUp ? ' (maior que zero).' : '.') };
+  const title = String(data.title != null ? data.title : (own ? own.title : '')).trim() || (metric ? GOAL_METRICS[metric].label : '');
+  if (!title) return { ok: false, error: 'Dê um nome para a meta.' };
+  if (own) {
+    own.target = target; if (!own.metric) own.title = title; save();
+    if (origin === 'admin') { notify(own.userId, `Meta atualizada: ${goalTitle(own)} agora é ${target}${GOAL_METRICS[own.metric] && GOAL_METRICS[own.metric].unit === '%' ? '%' : ''}.`, '/s/metas'); audit('Meta atualizada', goalTitle(own)); }
+    return { ok: true, goal: own };
+  }
+  let userId, period, b;
+  if (origin === 'admin') {
+    const rec = by('users', data.userId); if (!activeRec(rec)) return { ok: false, error: 'Escolha uma recrutadora ativa.' };
+    userId = rec.id; period = 'month'; b = data.month && /^\d{4}-\d{2}$/.test(data.month) ? isoMonth(data.month) : (x => ({ start: x.start.toISOString(), end: x.end.toISOString() }))(periodBounds('month'));
+  } else {
+    userId = u.id; period = data.period; if (!['day', 'week', 'month'].includes(period)) return { ok: false, error: 'Escolha o período da meta.' };
+    b = data.month && period === 'month' && /^\d{4}-\d{2}$/.test(data.month) ? isoMonth(data.month) : (x => ({ start: x.start.toISOString(), end: x.end.toISOString() }))(periodBounds(period));
+  }
+  if (db.goals.some(g => g.userId === userId && g.origin === origin && g.period === period && g.start === b.start && g.status === 'active' && (metric ? g.metric === metric : (!g.metric && g.title === title)))) return { ok: false, error: 'Já existe uma meta igual neste período.' };
+  const g = { id: uid('gl'), userId, origin, metric, title, target, unit: metric ? GOAL_METRICS[metric].unit : '', period, start: b.start, end: b.end, manual: metric ? null : 0, createdBy: u.id, createdAt: nowISO(), status: 'active' };
+  db.goals.push(g); save();
+  if (origin === 'admin') { notify(userId, `Nova meta atribuída: ${goalTitle(g)} — ${target}${g.unit === '%' ? '%' : ''} em ${ymTxt(monthKey(g.start))}.`, '/s/metas'); audit('Meta atribuída', `${goalTitle(g)} → ${by('users', userId).name}`); }
+  return { ok: true, goal: g };
+}
+function removeGoal(u, id) {
+  const origin = goalOriginOf(u), g = origin ? goalsFor(u).find(x => x.id === id && x.origin === origin) : null; if (!g) return { ok: false, error: 'Meta não encontrada.' };
+  db.goals.splice(db.goals.indexOf(g), 1); save();
+  if (origin === 'admin') { notify(g.userId, `Meta removida: ${goalTitle(g)}.`, '/s/metas'); audit('Meta removida', goalTitle(g)); }
+  return { ok: true };
+}
+function bumpGoal(u, id, delta) {
+  const g = u && u.role === 'recruiter' ? goalsFor(u).find(x => x.id === id && x.origin === 'self' && !x.metric) : null; if (!g) return { ok: false };
+  g.manual = Math.max(0, (g.manual || 0) + (+delta || 0)); save(); return { ok: true, value: g.manual };
+}
+function copyMonthGoals(u, fromMonth, toMonth) {
+  if (!u || u.role !== 'admin') return 0; const to = isoMonth(toMonth); let n = 0;
+  goalsFor(u).filter(g => g.period === 'month' && monthKey(g.start) === fromMonth && g.status === 'active').slice().forEach(g => {
+    if (!activeRec(by('users', g.userId))) return;
+    const r = saveGoal(u, { userId: g.userId, metric: g.metric, title: g.title, target: g.target, month: toMonth }); if (r.ok) n++;
+  });
+  return n;
+}
+function seedGoals(d) {
+  const b = periodBounds('month'), wk = periodBounds('week'), s0 = b.start.toISOString(), e0 = b.end.toISOString();
+  const G = (userId, origin, metric, title, target, period, manual, bounds) => d.goals.push({ id: uid('gl'), userId, origin, metric, title: title || GOAL_METRICS[metric].label, target, unit: metric ? GOAL_METRICS[metric].unit : '', period, start: (bounds || b).start.toISOString(), end: (bounds || b).end.toISOString(), manual, createdBy: origin === 'admin' ? 'u_admin' : userId, createdAt: nowISO(), status: 'active' });
+  G('u_rec1', 'admin', 'hires', null, 2, 'month', null); G('u_rec1', 'admin', 'triaged', null, 40, 'month', null); G('u_rec1', 'admin', 'stuck', null, 0, 'month', null);
+  G('u_rec2', 'admin', 'hires', null, 1, 'month', null); G('u_rec2', 'admin', 'resp', null, 2, 'month', null); G('u_rec2', 'admin', 'clientOk', null, 70, 'month', null);
+  G('u_rec1', 'self', null, 'Revisar 10 currículos do banco por semana', 10, 'week', 3, wk); G('u_rec2', 'self', null, 'Fazer 5 contatos de acompanhamento por dia', 5, 'day', 2, periodBounds('day'));
+}
+
 const actions = {
   googleSignIn(t) {
     const next = t.dataset.next || '';
@@ -2216,5 +2282,5 @@ ensureGoalsDb(); backfillActorIds();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals } };
 })();
