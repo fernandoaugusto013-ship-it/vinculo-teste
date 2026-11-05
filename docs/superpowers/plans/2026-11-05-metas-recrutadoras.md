@@ -30,7 +30,7 @@
 ## Estrutura de arquivos
 - Modificar `vinculo/app.js` (bloco Metas antes de `const actions = {`; ganchos em `moveApp`, `forms.eval`, `route`, `shell`, `dashboard`, `IND_SUBS`, `indicadoresView`, inicialização no fim).
 - Modificar `vinculo/app.css` (classes `.gl-*` ao final).
-- Criar `tests/metas/harness.html`, `conftest.py`, `test_01_data.py` … `test_09_regression.py`.
+- Criar `tests/metas/harness.html`, `conftest.py`, `test_00_smoke.py` … `test_10_history.py`, `test_11_regression.py`.
 
 ---
 
@@ -122,7 +122,7 @@ Demo em `seedDB`: metas do mês atual para `u_rec1` (`hires` 2, `triaged` 40, `s
 
 **Files:** Modify `vinculo/app.js` (`shell` → grupo "Análise" ~l.481; `route` caso `'s'` ~l.1500; nova `metasView()`), `vinculo/app.css`; Test `tests/metas/test_05_recruiter_view.py`
 
-**Interfaces — Consumes:** Tasks 3-5. **Produces:** rota `#/s/metas` → `metasView()`; `metasView()` decide pela sessão (`recruiter` → `metasRecruiter()`, `admin` → `metasAdmin()` na Task 8); nunca lê parâmetro de usuário da URL. Item de menu `nl('/s/metas', 'kanban'|'trend'…, 'Metas', lateCount)` para staff. Abas via `ui.metaTab` ∈ `'acomp'|'atrib'|'pess'`.
+**Interfaces — Consumes:** Tasks 3-5. **Produces:** rota `#/s/metas` → `metasView()`; `metasView()` decide pela sessão (`recruiter` → `metasRecruiter()`, `admin` → `metasAdmin()` na Task 8); nunca lê parâmetro de usuário da URL. Item de menu `nl('/s/metas', <nome de ícone já existente no mapa de ícones, o mesmo estilo dos itens de Análise>, 'Metas', lateCount)` para staff. Abas via `ui.metaTab` ∈ `'acomp'|'atrib'|'pess'`.
 
 - [ ] **Passo 1 (testes):**
   - `test_menu_item_visible_for_staff_only`: `Metas` no menu de `u_rec1` e admin; ausente para cliente e candidato; cliente e candidato abrindo `#/s/metas` veem "Acesso restrito".
@@ -159,6 +159,7 @@ Demo em `seedDB`: metas do mês atual para `u_rec1` (`hires` 2, `triaged` 40, `s
   - `test_assign_to_many`: duas recrutadoras selecionadas → duas metas.
   - `test_copy_previous_month`: botão copia e informa "N metas copiadas"; segundo clique informa "Nenhuma meta nova para copiar".
   - `test_admin_view_has_no_personal_goals`: nenhuma meta `origin:'self'` renderizada.
+  - `test_notify_on_edit_and_remove`: alterar o alvo ou remover uma meta atribuída gera notificação "Meta atualizada" / "Meta removida" para a recrutadora dona.
   - `test_recruiter_cannot_open_admin_actions`: como `u_rec1`, chamar `actions.goalAssign` via `__metas` devolve erro (sem criar nada).
 - [ ] **Passo 2:** FAIL. **Passo 3:** implementar. **Passo 4:** PASS. **Passo 5:** commit `feat(metas): tela do administrador`.
 
@@ -168,12 +169,12 @@ Demo em `seedDB`: metas do mês atual para `u_rec1` (`hires` 2, `triaged` 40, `s
 
 **Interfaces — Produces:** `lateGoalsFor(u:User): Goal[]` — metas de `goalsFor(u)` do período vigente com `status` ∈ `late|out`; só recrutadora (administrador → `[]`).
 
-- [ ] **Passo 1 (testes):** `test_badge_counts_late_goals` (selo no menu = nº de atrasadas; some quando zera); `test_dashboard_banner` (faixa "2 metas atrasadas" com link `#/s/metas`; ausente sem atrasos e ausente para administrador); `test_no_alert_for_other_recruiter` (atrasos de `u_rec2` nunca contam para `u_rec1`).
+- [ ] **Passo 1 (testes):** `test_badge_counts_late_goals` (selo no menu = nº de atrasadas; some quando zera); `test_dashboard_banner` (faixa "2 metas atrasadas" com link `#/s/metas`; ausente sem atrasos e ausente para administrador); `test_no_alert_for_other_recruiter` (atrasos de `u_rec2` nunca contam para `u_rec1`); `test_inactive_recruiter_leaves_tracking` (recrutadora desativada: `lateGoalsFor` → `[]`, some da tabela do administrador, metas passam ao histórico).
 - [ ] **Passo 2:** FAIL. **Passo 3:** implementar. **Passo 4:** PASS. **Passo 5:** commit `feat(metas): alertas`.
 
 ### Task 10: Fotos mensais e histórico em Indicadores
 
-**Files:** Modify `vinculo/app.js` (`IND_SUBS`, `indicadoresView` ramo `'metas'`, `closeMonths`, `goalHistory`, seed de fotos, inicialização), `vinculo/app.css`; Test `tests/metas/test_08_history.py`
+**Files:** Modify `vinculo/app.js` (`IND_SUBS`, `indicadoresView` ramo `'metas'`, `closeMonths`, `goalHistory`, seed de fotos, inicialização), `vinculo/app.css`; Test `tests/metas/test_10_history.py`
 
 **Interfaces — Produces:** `closeMonths(now?:Date): number` (cria `goalSnaps` para metas mensais de meses encerrados sem foto; idempotente por `goalId`+`month`; devolve quantas criou); `goalHistory(u:User, months?:number): Array<{month:string,total:number,hit:number,pct:number|null,byMetric:Record<string,{target:number,result:number|null,hit:boolean}>}>` — recrutadora: só as dela (atribuídas e pessoais mensais); administrador: todas, só `origin:'admin'`. Nova entrada `['metas','Metas (histórico)','Resultado das metas mês a mês.']` em `IND_SUBS`; a página mostra últimos 12 meses ("Sem metas" nos vazios).
 
@@ -189,7 +190,7 @@ Demo em `seedDB`: metas do mês atual para `u_rec1` (`hires` 2, `triaged` 40, `s
 
 ### Task 11: Permissões ponta a ponta, regressão e validação visual
 
-**Files:** Create `tests/metas/test_09_regression.py`; screenshots em `/tmp`-equivalente do scratchpad.
+**Files:** Create `tests/metas/test_11_regression.py`; screenshots em `/tmp`-equivalente do scratchpad.
 
 - [ ] **Passo 1 (testes):**
   - `test_permission_matrix`: para cada papel (admin, `u_rec1`, `u_rec2`, cliente, candidato) e cada rota `#/s/metas`, `#/s/metas?user=u_rec2`, `#/s/indicadores/metas`: o HTML nunca contém título de meta de outra recrutadora; cliente e candidato veem "Acesso restrito".
