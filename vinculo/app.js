@@ -351,7 +351,7 @@ function seedDB() {
   const mkApp = (job, c, stage, daysOld, ok) => {
     const date = new Date(Date.now() - daysOld * 864e5);
     let path; if (stage === 'reprovado' || stage === 'desistiu') { path = PATH.slice(0, int(1, 4)).concat(stage); } else path = PATH.slice(0, PATH.indexOf(stage) + 1);
-    const history = path.map((s, k) => ({ stage: s, date: new Date(Math.min(Date.now() - 3600e3, date.getTime() + k * int(1, 3) * 864e5)).toISOString(), by: k === 0 ? c.name : (job.recruiterId === 'u_rec2' ? 'Rafael Lima' : 'Camila Duarte') }));
+    const history = path.map((s, k) => ({ stage: s, date: new Date(Math.min(Date.now() - 3600e3, date.getTime() + k * int(1, 3) * 864e5)).toISOString(), by: k === 0 ? c.name : (job.recruiterId === 'u_rec2' ? 'Rafael Lima' : 'Camila Duarte'), byId: k === 0 ? null : (job.recruiterId === 'u_rec2' ? 'u_rec2' : 'u_rec1') }));
     const a = { id: uid('ap'), jobId: job.id, candId: c.id, date: date.toISOString(), stage, answers: answersFor(job, c, ok), salary: c.salary, avail: c.avail, note: '', history, forwarded: path.includes('entrevista_cliente'), clientDecision: null, clientFeedback: [], interview: null, hiredDate: null };
     if (['aprovado', 'contratado'].includes(stage)) a.clientDecision = 'advance';
     if (stage === 'contratado') a.hiredDate = history[history.length - 1].date;
@@ -379,7 +379,7 @@ function seedDB() {
   // Avaliações internas de exemplo
   d.apps.filter(a => ['entrevista_rh', 'entrevista_cliente', 'aprovado', 'contratado'].includes(a.stage)).forEach((a, k) => {
     if (k % 2) return; const c = cands.find(x => x.id === a.candId), job = d.jobs.find(x => x.id === a.jobId);
-    d.evals.push({ id: uid('ev'), candId: c.id, appId: a.id, jobId: job.id, by: job.recruiterId === 'u_rec2' ? 'Rafael Lima' : 'Camila Duarte', date: dAgo(int(1, 20)), pos: 'Comunicação clara, boa aderência técnica e postura profissional.', attn: pick(['Pretensão no limite superior da faixa.', 'Pouca experiência com a ferramenta principal.', 'Disponibilidade sujeita a aviso prévio.']), salary: c.salary, avail: c.avail, notes: 'Entrevista conduzida por vídeo. Candidato(a) demonstrou interesse real pela vaga.', tech: int(3, 5), behav: int(3, 5), tags: c.tags.slice(0, 2) });
+    d.evals.push({ id: uid('ev'), candId: c.id, appId: a.id, jobId: job.id, by: job.recruiterId === 'u_rec2' ? 'Rafael Lima' : 'Camila Duarte', byId: job.recruiterId === 'u_rec2' ? 'u_rec2' : 'u_rec1', date: dAgo(int(1, 20)), pos: 'Comunicação clara, boa aderência técnica e postura profissional.', attn: pick(['Pretensão no limite superior da faixa.', 'Pouca experiência com a ferramenta principal.', 'Disponibilidade sujeita a aviso prévio.']), salary: c.salary, avail: c.avail, notes: 'Entrevista conduzida por vídeo. Candidato(a) demonstrou interesse real pela vaga.', tech: int(3, 5), behav: int(3, 5), tags: c.tags.slice(0, 2) });
   });
 
   // Notificações
@@ -1644,7 +1644,7 @@ const localDT = d => { const p = n => String(n).padStart(2, '0'); return `${d.ge
 function moveApp(id, stage) {
   const a = by('apps', id); if (!a || a.stage === stage) return;
   const job = by('jobs', a.jobId), c = by('cands', a.candId), u = curUser();
-  a.stage = stage; a.history.push({ stage, date: nowISO(), by: u ? u.name : '—' });
+  a.stage = stage; a.history.push({ stage, date: nowISO(), by: u ? u.name : '—', byId: u ? u.id : null });
   if (stage === 'entrevista_rh' || stage === 'entrevista_cliente') a.interview = null;
   if (stage === 'entrevista_cliente') {
     a.forwarded = true; a.clientDecision = null;
@@ -1675,6 +1675,14 @@ function openSchedule(id) {
 }
 
 /* ---------- Ações (data-act) ---------- */
+/* ---------- Metas das recrutadoras ---------- */
+function ensureGoalsDb() { if (!Array.isArray(db.goals)) db.goals = []; if (!Array.isArray(db.goalSnaps)) db.goalSnaps = []; }
+function backfillActorIds() {
+  const staff = db.users.filter(isStaff), idOf = n => { const m = staff.filter(x => x.name === n); return m.length === 1 ? m[0].id : null; };
+  db.apps.forEach(a => a.history.forEach(h => { if (h.byId === undefined) h.byId = idOf(h.by); }));
+  db.evals.forEach(e => { if (e.byId === undefined) e.byId = idOf(e.by); });
+}
+
 const actions = {
   googleSignIn(t) {
     const next = t.dataset.next || '';
@@ -1690,7 +1698,7 @@ const actions = {
   logout() { Auth.logout(); ui.side = false; closeModal(); if (location.hash === '#/') render(); else go('/'); toast('Você saiu da conta.'); },
   demoLogin(t) { const u = Auth.login(t.dataset.email, 'demo123'); if (!u) return toast('Conta de demonstração indisponível. Restaure os dados.', true); toast(`Bem-vindo(a), ${u.name.split(' ')[0]}!`); go(homeOf(u)); },
   reset() { confirmBox('Restaurar dados de demonstração', 'Todos os dados criados neste navegador serão apagados e os dados de exemplo voltam ao estado inicial.', 'Restaurar', 'doReset', {}, true); },
-  doReset() { Persist.clear(); db = seedDB(); Sess.set(null); save(); Object.assign(ui, { jobs: {}, tb: { limit: 18 }, tri: { stage: 'novo' }, boardq: '', cmp: {}, aiResult: null }); closeModal(); if (location.hash === '#/' || !location.hash) render(); else go('/'); toast('Dados de demonstração restaurados.'); },
+  doReset() { Persist.clear(); db = seedDB(); ensureGoalsDb(); Sess.set(null); save(); Object.assign(ui, { jobs: {}, tb: { limit: 18 }, tri: { stage: 'novo' }, boardq: '', cmp: {}, aiResult: null }); closeModal(); if (location.hash === '#/' || !location.hash) render(); else go('/'); toast('Dados de demonstração restaurados.'); },
   addRow(t) { const g = t.dataset.g, box = $('#g-' + g); if (box && ROWS[g]) box.insertAdjacentHTML('beforeend', ROWS[g]({})); },
   delRow(t) { const r = t.closest('.rep'); if (r) r.remove(); },
   delChip(t) { const c = t.closest('.chip'); if (c) c.remove(); },
@@ -1903,7 +1911,7 @@ const forms = {
     if (!job || job.status !== 'open') return toast('Esta vaga não está mais recebendo candidaturas.', true);
     if (db.apps.some(a => a.jobId === job.id && a.candId === c.id)) return toast('Você já se candidatou a esta vaga.', true);
     const answers = {}; job.screening.forEach(q => { answers[q.id] = String(fd.get('q_' + q.id) || '').trim(); });
-    const a = { id: uid('ap'), jobId: job.id, candId: c.id, date: nowISO(), stage: 'novo', answers, salary: +fd.get('salary') || c.salary, avail: String(fd.get('avail') || c.avail), note: String(fd.get('note') || '').trim(), history: [{ stage: 'novo', date: nowISO(), by: c.name }], forwarded: false, clientDecision: null, clientFeedback: [], interview: null, hiredDate: null };
+    const a = { id: uid('ap'), jobId: job.id, candId: c.id, date: nowISO(), stage: 'novo', answers, salary: +fd.get('salary') || c.salary, avail: String(fd.get('avail') || c.avail), note: String(fd.get('note') || '').trim(), history: [{ stage: 'novo', date: nowISO(), by: c.name, byId: null }], forwarded: false, clientDecision: null, clientFeedback: [], interview: null, hiredDate: null };
     db.apps.push(a); db.invites.filter(i => i.candId === c.id && i.jobId === job.id).forEach(i => { i.status = 'aceito'; });
     notify(u.id, CAND_MSG.novo.replace('{job}', job.title), '/c/candidaturas');
     notify(job.recruiterId, `Novo candidato para a vaga ${job.title}: ${c.name}.`, '/s/vaga/' + job.id);
@@ -1941,7 +1949,7 @@ const forms = {
   eval(f) {
     if (!validate(f)) return;
     const fd = new FormData(f), g = k => String(fd.get(k) || '').trim(), c = by('cands', f.dataset.cid), a = by('apps', g('appId')), tags = fd.getAll('tags');
-    db.evals.unshift({ id: uid('ev'), candId: c.id, appId: a.id, jobId: a.jobId, by: curUser().name, date: nowISO(), pos: g('pos'), attn: g('attn') || '—', notes: g('notes') || '—', tech: +g('tech'), behav: +g('behav'), salary: +g('salary') || c.salary, avail: g('avail'), tags });
+    db.evals.unshift({ id: uid('ev'), candId: c.id, appId: a.id, jobId: a.jobId, by: curUser().name, byId: curUser().id, date: nowISO(), pos: g('pos'), attn: g('attn') || '—', notes: g('notes') || '—', tech: +g('tech'), behav: +g('behav'), salary: +g('salary') || c.salary, avail: g('avail'), tags });
     c.tags = uniq([...(c.tags || []), ...tags]); audit('Avaliação registrada', c.name); save(); closeModal(); render(true); toast('Avaliação registrada.');
   },
   invite(f) {
@@ -2138,8 +2146,9 @@ db = Persist.load();
 if (!db || !db.users || !db.jobs) { db = seedDB(); }
 ['invites', 'requests', 'delReqs', 'audit', 'outbox', 'evals', 'notifs'].forEach(k => { if (!db[k]) db[k] = []; });
 if (!db.cargos) db.cargos = defaultCargos();
+ensureGoalsDb(); backfillActorIds();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds } };
 })();
