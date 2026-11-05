@@ -1917,13 +1917,14 @@ function metasAdmin(u) {
   const mk = /^\d{4}-\d{2}$/.test(ui.metaMonth || '') ? ui.metaMonth : monthKey(new Date()), recs = db.users.filter(activeRec);
   const all = goalsFor(u).filter(g => g.period === 'month' && monthKey(g.start) === mk && g.status === 'active');
   const okSt = ['hit', 'ontrack', 'within'];
-  const cards = recs.map(r => {
+  const selRec = recs.some(r => r.id === ui.metaRec) ? ui.metaRec : '', shown = selRec ? recs.filter(r => r.id === selRec) : recs;
+  const cards = shown.map(r => {
     const gs = all.filter(g => g.userId === r.id), ps = gs.map(g => [g, goalProgress(g, monthKey(new Date()) === mk ? new Date() : toDate(g.end))]), ok = ps.filter(x => okSt.includes(x[1].status)).length;
     const rows = ps.map(([g, p]) => { const unit = g.metric ? GOAL_METRICS[g.metric].unit : g.unit; return `<tr><td class="b">${esc(goalTitle(g))}</td><td>${goalDir(g) === 'down' ? 'até ' : ''}${esc(goalNum(+g.target, unit))}</td><td>${p.value == null ? '—' : esc(goalNum(p.value, unit))}</td><td><span class="badge" style="--c:${GOAL_COLOR[p.status]}">${GOAL_STATUS_LABEL[p.status]}</span></td><td style="text-align:right"><button type="button" class="btn sm" data-act="goalAdmEdit" data-id="${g.id}">Editar</button> <button type="button" class="btn sm danger" data-act="goalAdmDel" data-id="${g.id}">Remover</button></td></tr>`; }).join('');
     return `<section class="card mb gl-team" data-rec="${r.id}"><div class="flex between gap wrap"><div class="flex gap" style="align-items:center">${avatar(r.name, 38)}<div><b>${esc(r.name)}</b><div class="xs mut">${gs.length ? `${ok} de ${gs.length} ${gs.length === 1 ? 'meta no ritmo' : 'metas no ritmo'}` : 'Sem metas atribuídas neste mês'}</div></div></div></div>
-    ${gs.length ? `<div class="tw mt-s"><table><thead><tr><th>Meta</th><th>Alvo</th><th>Resultado</th><th>Situação</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}</section>`;
+    ${selRec && gs.length ? `<div class="gl-grid mt-s">${gs.map(g => goalCard(g)).join('')}</div>` : ''}${gs.length ? `<div class="tw mt-s"><table><thead><tr><th>Meta</th><th>Alvo</th><th>Resultado</th><th>Situação</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}</section>`;
   }).join('') || '<div class="empty">Nenhuma recrutadora ativa.</div>';
-  const acts = `<label class="field" style="min-width:150px;margin:0"><span class="xs mut">Mês</span>${sel('month', monthOptions(), mk, null, 'data-act="metaMonth" aria-label="Mês"')}</label><button type="button" class="btn" data-act="goalCopy">Copiar do mês anterior</button><button type="button" class="btn pri" data-act="goalAssign">${ico('plus', 14)} Atribuir meta</button>`;
+  const acts = `<label class="field" style="min-width:190px;margin:0"><span class="xs mut">Recrutadora</span>${sel('rec', recs.map(r => [r.id, r.name]), selRec, 'Todas as recrutadoras', 'data-act="metaRec" aria-label="Recrutadora"')}</label><label class="field" style="min-width:150px;margin:0"><span class="xs mut">Mês</span>${sel('month', monthOptions(), mk, null, 'data-act="metaMonth" aria-label="Mês"')}</label><button type="button" class="btn" data-act="goalCopy">Copiar do mês anterior</button><button type="button" class="btn pri" data-act="goalAssign">${ico('plus', 14)} Atribuir meta</button>`;
   return shell(pageHead('Metas da equipe', 'Atribua metas mensais e acompanhe o andamento de cada recrutadora. Metas pessoais ficam visíveis somente para quem as criou.', acts) + cards);
 }
 function metasView() {
@@ -1936,6 +1937,7 @@ function metasView() {
 const actions = {
   metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
   goalNew() { goalSelfModal(null); },
+  metaRec(t) { ui.metaRec = t.value; render(true); },
   metaMonth(t) { ui.metaMonth = t.value; render(true); },
   goalAssign() { if (curUser().role === 'admin') goalAdminModal(); },
   goalAdmMetric(t) { const box = $('#gl-rows'); if (box) box.innerHTML = goalAdminRows(t.value, $$('#gl-rows [name=rec]:checked').map(x => x.value)); },
