@@ -1860,7 +1860,33 @@ function goalSelfModal(g) {
   ${fld('Valor da meta', inp('target', g ? g.target : '', { type: 'number', req: true, attrs: 'min="0" step="any" inputmode="decimal"' }))}
   <div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Salvar meta</button></div></form>`);
 }
-function metasAdmin(u) { return shell(pageHead('Metas da equipe', 'Atribua metas mensais às recrutadoras.')); }
+const shiftMonth = (key, n) => { const [y, m] = key.split('-').map(Number); return monthKey(new Date(y, m - 1 + n, 1)); };
+const monthOptions = () => { const c = monthKey(new Date()); return [-2, -1, 0, 1].map(n => { const k = shiftMonth(c, n); return [k, ymTxt(k) + (n === 0 ? ' (atual)' : '')]; }); };
+function goalAdminRows(metric, selected) {
+  const recs = db.users.filter(activeRec);
+  return recs.map(r => { const sg = suggestTarget(metric, r.id, 'month'), unit = GOAL_METRICS[metric].unit, chk = selected ? selected.includes(r.id) : false;
+    return `<div class="gl-row"><label class="gl-who"><input type="checkbox" name="rec" value="${r.id}" ${chk ? 'checked' : ''}> ${avatar(r.name, 28)} <span class="b">${esc(r.name)}</span></label><div class="gl-tv"><input name="t_${r.id}" type="number" min="0" step="any" inputmode="decimal" value="${sg.value || ''}" aria-label="Valor da meta para ${esc(r.name)}"><small class="xs mut">${sg.base == null ? 'Sem histórico: defina o valor' : 'média dos últimos 90 dias: ' + esc(goalNum(sg.base, unit)) + ' (editável)'}</small></div></div>`; }).join('') || '<p class="mut">Nenhuma recrutadora ativa.</p>';
+}
+function goalAdminModal() {
+  const metric = 'hires';
+  openModal('Atribuir meta', `<form data-form="goalAdmin"><div class="g2">${fld('Métrica', sel('metric', Object.keys(GOAL_METRICS).map(k => [k, GOAL_METRICS[k].label + (GOAL_METRICS[k].dir === 'down' ? ' (menor é melhor)' : '')]), metric, null, 'data-act="goalAdmMetric"'))}
+  ${fld('Mês', sel('month', monthOptions(), ui.metaMonth || monthKey(new Date())))}</div>
+  <p class="sm b mt-s">Recrutadoras e valor da meta</p><div id="gl-rows">${goalAdminRows(metric)}</div>
+  <div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Atribuir</button></div></form>`, true);
+}
+function metasAdmin(u) {
+  const mk = /^\d{4}-\d{2}$/.test(ui.metaMonth || '') ? ui.metaMonth : monthKey(new Date()), recs = db.users.filter(activeRec);
+  const all = goalsFor(u).filter(g => g.period === 'month' && monthKey(g.start) === mk && g.status === 'active');
+  const okSt = ['hit', 'ontrack', 'within'];
+  const cards = recs.map(r => {
+    const gs = all.filter(g => g.userId === r.id), ps = gs.map(g => [g, goalProgress(g, monthKey(new Date()) === mk ? new Date() : toDate(g.end))]), ok = ps.filter(x => okSt.includes(x[1].status)).length;
+    const rows = ps.map(([g, p]) => { const unit = g.metric ? GOAL_METRICS[g.metric].unit : g.unit; return `<tr><td class="b">${esc(goalTitle(g))}</td><td>${goalDir(g) === 'down' ? 'até ' : ''}${esc(goalNum(+g.target, unit))}</td><td>${p.value == null ? '—' : esc(goalNum(p.value, unit))}</td><td><span class="badge" style="--c:${GOAL_COLOR[p.status]}">${GOAL_STATUS_LABEL[p.status]}</span></td><td style="text-align:right"><button type="button" class="btn sm" data-act="goalAdmEdit" data-id="${g.id}">Editar</button> <button type="button" class="btn sm danger" data-act="goalAdmDel" data-id="${g.id}">Remover</button></td></tr>`; }).join('');
+    return `<section class="card mb gl-team" data-rec="${r.id}"><div class="flex between gap wrap"><div class="flex gap" style="align-items:center">${avatar(r.name, 38)}<div><b>${esc(r.name)}</b><div class="xs mut">${gs.length ? `${ok} de ${gs.length} ${gs.length === 1 ? 'meta no ritmo' : 'metas no ritmo'}` : 'Sem metas atribuídas neste mês'}</div></div></div></div>
+    ${gs.length ? `<div class="tw mt-s"><table><thead><tr><th>Meta</th><th>Alvo</th><th>Resultado</th><th>Situação</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}</section>`;
+  }).join('') || '<div class="empty">Nenhuma recrutadora ativa.</div>';
+  const acts = `<label class="field" style="min-width:150px;margin:0"><span class="xs mut">Mês</span>${sel('month', monthOptions(), mk, null, 'data-act="metaMonth" aria-label="Mês"')}</label><button type="button" class="btn" data-act="goalCopy">Copiar do mês anterior</button><button type="button" class="btn pri" data-act="goalAssign">${ico('plus', 14)} Atribuir meta</button>`;
+  return shell(pageHead('Metas da equipe', 'Atribua metas mensais e acompanhe o andamento de cada recrutadora. Metas pessoais ficam visíveis somente para quem as criou.', acts) + cards);
+}
 function metasView() {
   const u = curUser(); if (!u) return denied();
   if (u.role === 'recruiter') return metasRecruiter(u);
@@ -1871,6 +1897,13 @@ function metasView() {
 const actions = {
   metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
   goalNew() { goalSelfModal(null); },
+  metaMonth(t) { ui.metaMonth = t.value; render(true); },
+  goalAssign() { if (curUser().role === 'admin') goalAdminModal(); },
+  goalAdmMetric(t) { const box = $('#gl-rows'); if (box) box.innerHTML = goalAdminRows(t.value, $$('#gl-rows [name=rec]:checked').map(x => x.value)); },
+  goalAdmEdit(t) { const u = curUser(), g = goalsFor(u).find(x => x.id === t.dataset.id && x.origin === 'admin'); if (!g || u.role !== 'admin') return; openModal('Editar meta', `<form data-form="goalAdminEdit"><input type="hidden" name="id" value="${g.id}"><p class="sm">${esc(goalTitle(g))} — ${esc(by('users', g.userId).name)}</p>${fld('Valor da meta', inp('target', g.target, { type: 'number', req: true, attrs: 'min="0" step="any" inputmode="decimal"' }))}<div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Salvar</button></div></form>`); },
+  goalAdmDel(t) { const u = curUser(), g = goalsFor(u).find(x => x.id === t.dataset.id && x.origin === 'admin'); if (g && u.role === 'admin') confirmBox('Remover meta', `Remover "${esc(goalTitle(g))}" de ${esc(by('users', g.userId).name)}? A recrutadora será avisada.`, 'Remover', 'goalAdmDelDo', { id: g.id }, true); },
+  goalAdmDelDo(t) { const r = removeGoal(curUser(), t.dataset.id); closeModal(); toast(r.ok ? 'Meta removida.' : r.error, !r.ok); render(true); },
+  goalCopy() { const u = curUser(); if (u.role !== 'admin') return; const mk = ui.metaMonth || monthKey(new Date()), n = copyMonthGoals(u, shiftMonth(mk, -1), mk); toast(n ? `${n} ${n === 1 ? 'meta copiada' : 'metas copiadas'} de ${ymTxt(shiftMonth(mk, -1))}.` : 'Nenhuma meta nova para copiar.', !n); render(true); },
   goalEdit(t) { const g = goalsFor(curUser()).find(x => x.id === t.dataset.id && x.origin === 'self'); if (g) goalSelfModal(g); },
   goalDel(t) { const g = goalsFor(curUser()).find(x => x.id === t.dataset.id && x.origin === 'self'); if (g) confirmBox('Apagar meta', `Apagar a meta "${esc(goalTitle(g))}"? Esta ação não pode ser desfeita.`, 'Apagar', 'goalDelDo', { id: g.id }, true); },
   goalDelDo(t) { const r = removeGoal(curUser(), t.dataset.id); closeModal(); toast(r.ok ? 'Meta apagada.' : r.error, !r.ok); render(true); },
@@ -2059,6 +2092,15 @@ const actions = {
 
 /* ---------- Formulários (data-form) ---------- */
 const forms = {
+  goalAdmin(f) {
+    const u = curUser(); if (u.role !== 'admin') return; const fd = new FormData(f), metric = fd.get('metric'), month = fd.get('month'), recs = fd.getAll('rec');
+    if (!recs.length) return toast('Escolha ao menos uma recrutadora.', true);
+    let ok = 0; const errs = [];
+    recs.forEach(id => { const r = saveGoal(u, { userId: id, metric, month, target: fd.get('t_' + id) }); if (r.ok) ok++; else errs.push(by('users', id).name + ': ' + r.error); });
+    if (errs.length) toast(errs[0] + (errs.length > 1 ? ` (+${errs.length - 1})` : ''), true);
+    if (ok) { closeModal(); ui.metaMonth = month; toast(`${ok} ${ok === 1 ? 'meta atribuída' : 'metas atribuídas'}.`); render(true); }
+  },
+  goalAdminEdit(f) { if (!validate(f)) return; const fd = new FormData(f), r = saveGoal(curUser(), { id: fd.get('id'), target: fd.get('target') }); if (!r.ok) return toast(r.error, true); closeModal(); toast('Meta atualizada.'); render(true); },
   goalSelf(f) {
     if (!validate(f)) return; const fd = new FormData(f), r = saveGoal(curUser(), { id: fd.get('id') || undefined, title: fd.get('title'), period: fd.get('period'), metric: fd.get('metric') || null, target: fd.get('target') });
     if (!r.ok) return toast(r.error, true);

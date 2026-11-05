@@ -830,3 +830,5 @@ body.lp .auth-in{animation:lpup 1.4s 1.1s cubic-bezier(.22,.61,.36,1) both}
 .gl-attn h3{margin:0 0 6px}.gl-attn.bad{border-left:4px solid var(--red)}.gl-attn.ok{border-left:4px solid var(--green)}
 .gl-list{margin:6px 0 0;padding-left:18px}.gl-list li{margin:4px 0}
 .gl-tabs .btn[aria-pressed="true"]{font-weight:700}
+.gl-row{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.gl-who{display:flex;gap:10px;align-items:center;cursor:pointer}.gl-tv{display:flex;flex-direction:column;gap:2px;min-width:170px}.gl-tv input{width:120px}
