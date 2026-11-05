@@ -1731,6 +1731,24 @@ function suggestTarget(metric, userId, period) {
   return { value, base };
 }
 
+const GOAL_STATUS_LABEL = { hit: 'Atingida', ontrack: 'No ritmo', late: 'Atrasada', missed: 'Não atingida', within: 'Dentro da meta', out: 'Fora da meta', nodata: 'Dados insuficientes' };
+const goalDir = g => g.metric ? GOAL_METRICS[g.metric].dir : 'up';
+function goalProgress(goal, now) {
+  now = now ? toDate(now) : new Date(); const s = toDate(goal.start), e = toDate(goal.end), total = e - s;
+  const value = goal.metric ? goalMetricValue(goal.metric, goal.userId, s, e) : (goal.manual || 0), target = +goal.target;
+  const expectedPct = total <= 0 ? 100 : Math.round(Math.min(100, Math.max(0, (now - s) / total * 100)) * 10) / 10;
+  const ended = now >= e, daysLeft = ended ? 0 : Math.max(0, Math.ceil((e - now) / 864e5) - 1);
+  const pct = goalDir(goal) === 'up' && target > 0 && value != null ? Math.round(value / target * 1000) / 10 : null;
+  let status;
+  if (value == null) status = 'nodata';
+  else if (goalDir(goal) === 'down') status = value <= target ? 'within' : 'out';
+  else if (pct == null) status = 'nodata';
+  else if (pct >= 100) status = 'hit';
+  else if (ended) status = 'missed';
+  else status = pct >= expectedPct - 10 ? 'ontrack' : 'late';
+  return { value, pct, expectedPct, status, daysLeft };
+}
+
 const actions = {
   googleSignIn(t) {
     const next = t.dataset.next || '';
@@ -2198,5 +2216,5 @@ ensureGoalsDb(); backfillActorIds();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL } };
 })();
