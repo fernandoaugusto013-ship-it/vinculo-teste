@@ -988,7 +988,7 @@ function dashboard() {
   const jobs = openJobs.map(j => ({ j, n: jobApps(j.id).length, h: jobApps(j.id).filter(a => a.stage === 'contratado').length })).sort((x, y) => y.n - x.n).slice(0, 4);
   const recent = db.audit.slice(0, 6);
   return shell(`${pageHead(hi + ', ' + esc(u.name.split(' ')[0]), 'O que precisa da sua atenção hoje.', `<a class="btn pri" href="#/s/vaga/nova">${ico('plus', 16)} Nova vaga</a><a class="btn" href="#/s/banco">Buscar no banco</a><a class="btn" href="#/s/indicadores/geral">${ico('trend', 16)} Ver indicadores</a>`)}
-  <div class="dash"><section class="dc dc-dark"><span class="dl">${hero.l}</span><b class="dn">${hero.v}</b><span class="ds">${hero.t}</span>${sparkBars(hero.s)}<a class="dlink" href="${hero.href}">${hero.b} ${ico('right', 14)}</a></section>
+  ${goalBanner(u)}<div class="dash"><section class="dc dc-dark"><span class="dl">${hero.l}</span><b class="dn">${hero.v}</b><span class="ds">${hero.t}</span>${sparkBars(hero.s)}<a class="dlink" href="${hero.href}">${hero.b} ${ico('right', 14)}</a></section>
   <section class="dc dc-coral"><span class="dl">Aguardando triagem</span><b class="dn">${novas.length}</b><span class="ds">${velhas.length ? velhas.length + ' há mais de 2 dias' : 'tudo dentro do prazo'}</span><a class="btn dwhite" href="#/s/triagem">Triar agora ${ico('right', 14)}</a></section>
   <section class="dc"><h3>Próximas entrevistas</h3>${nextIv.length ? `<ul class="dlist">${nextIv.map(a => { const c = by('cands', a.candId), j = by('jobs', a.jobId); return `<li>${avatar(c.name, 34)}<div class="grow"><div class="b sm">${esc(c.name)}</div><div class="xs mut">${esc(j ? j.title : '')} · ${a.interview.type}</div></div><span class="badge">${fdt(a.interview.date)}</span></li>`; }).join('')}</ul>` : '<p class="mut sm">Nenhuma entrevista agendada.</p>'}</section>
   <section class="dc dc-wide"><h3>Precisa de atenção</h3>${todo.length ? `<ul class="dtodo">${todo.map(t => `<li><span class="ni" data-c="${t[1]}">${ico(t[0], 18)}</span><span class="grow">${t[2]}</span><a class="btn sm" href="${t[3]}">${t[4]}</a></li>`).join('')}</ul>` : '<p class="mut">Nada pendente. Bom trabalho!</p>'}</section>
@@ -1873,6 +1873,10 @@ function goalAdminModal() {
   ${fld('Mês', sel('month', monthOptions(), ui.metaMonth || monthKey(new Date())))}</div>
   <p class="sm b mt-s">Recrutadoras e valor da meta</p><div id="gl-rows">${goalAdminRows(metric)}</div>
   <div class="flex gap wrap mt" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Atribuir</button></div></form>`, true);
+}
+function goalBanner(u) {
+  const n = lateGoalsFor(u).length; if (!n) return '';
+  return `<a class="gl-banner" href="#/s/metas" role="status"><b>${n} ${n === 1 ? 'meta atrasada' : 'metas atrasadas'}</b><span>Veja o que falta para alcançar ${n === 1 ? 'ela' : 'elas'} neste período.</span>${ico('right', 16)}</a>`;
 }
 function metasAdmin(u) {
   const mk = /^\d{4}-\d{2}$/.test(ui.metaMonth || '') ? ui.metaMonth : monthKey(new Date()), recs = db.users.filter(activeRec);
