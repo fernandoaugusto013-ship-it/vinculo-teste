@@ -6,12 +6,12 @@ def test_admin_job_list_has_fin_button_and_status(app):
     app.login('u_admin'); app.go('#/s/vagas')
     n = app.ev("() => __V.db.jobs.length")
     assert app.page.locator('#ja-res a[href$="/financeiro"]').count() == n
-    assert 'Financeiro pendente' in app.main()
+    assert app.page.locator('#ja-res a[title="Financeiro pendente"]').count() == n
     jid = app.ev("() => __V.db.jobs[0].id")
     assert app.ev("([j, d]) => __V.fin.saveJobFin(__V.db.users.find(x => x.id === 'u_admin'), j, d).ok", [jid, FIN]) is True
     app.ev('() => __V.render()'); app.page.wait_for_timeout(150)
     row = app.page.locator(f'#ja-res a[href="#/s/vaga/{jid}/financeiro"]')
-    assert 'Financeiro preenchido' in row.inner_text()
+    assert row.get_attribute('title') == 'Financeiro preenchido' and 'preenchido' in row.inner_text()
     row.click(); app.page.wait_for_timeout(200); assert 'Financeiro —' in app.main()
     assert app.errors == []
 
