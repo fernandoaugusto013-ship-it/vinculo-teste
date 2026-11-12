@@ -73,7 +73,7 @@
     const liq = C.liquido(+f.valor, f.gupy, p), fx = C.faixa(f.tipo, pr, p);
     return { ok: true, liquido: liq, prazo: pr, pct: fx.pct, valor: C.round2(liq * fx.pct * part / 100) };
   };
-  const carteiraOk = (f, p) => f.origTipo !== 'cliente_novo' || (C.isDate(f.contratoInicio) && C.isDate(f.fatura && f.fatura.recebimento) && f.fatura.recebimento <= C.addMonths(f.contratoInicio, p.carteiraMeses));
+  const carteiraOk = (f, p) => f.origTipo !== 'cliente_novo' || (C.isDate(f.contratoInicio) && C.isDate(f.fatura && f.fatura.recebimento) && f.fatura.recebimento >= f.contratoInicio && f.fatura.recebimento <= C.addMonths(f.contratoInicio, p.carteiraMeses));
   C.originacao = (jobs, userId, p) => jobs.filter(j => j.fin && finOk(j.fin) && j.fin.originadaPor === userId && j.fin.origTipo && carteiraOk(j.fin, p)).map(j => {
     const base = C.liquido(+j.fin.valor, j.fin.gupy, p);
     return { jobId: j.id, tipo: j.fin.origTipo, base, valor: C.round2(base * p.origPct), competencia: C.competencia(j.fin, p), ref: refDate(j.fin) };

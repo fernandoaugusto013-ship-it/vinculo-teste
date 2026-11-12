@@ -95,3 +95,9 @@ test('carência atravessando o ano: admissão 28/12 → competência janeiro, pa
   assert.equal(ex.linhas.length, 1); assert.equal(ex.pagamentoEm, '2027-02-15');
   assert.equal(C.extrato('2026-12', U, [{ id: 'x', cliente: 'A', cargo: 'B', fin: f }], [], p).linhas.length, 0);
 });
+test('cliente novo: vaga faturada antes do início do contrato não gera originação', () => {
+  const f = { valor: 1320, gupy: false, tipo: 'geral', alinhamento: '2026-01-01', aprovacao: '2026-01-05', diasSuspensos: 0, admissao: '2026-01-06', status: 'fechada',
+    fatura: { emissao: '2026-01-07', status: 'recebida', recebimento: '2026-01-10' }, parts: [{ userId: 'u9', pct: 100 }], originadaPor: 'u1', origTipo: 'cliente_novo', contratoInicio: '2026-03-01' };
+  assert.equal(C.originacao([{ id: 'x', fin: f }], 'u1', p).length, 0);
+  assert.equal(C.originacao([{ id: 'y', fin: Object.assign({}, f, { fatura: { emissao: '2026-03-05', status: 'recebida', recebimento: '2026-03-10' } }) }], 'u1', p).length, 1);
+});

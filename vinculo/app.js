@@ -2111,7 +2111,7 @@ function oppMonthsOpen(o, n) {
   if (o.status !== 'ganha' && n.status !== 'ganha') return true;
   const p = payParams(), months = [];
   [o, n].forEach(x => { if (x.status !== 'ganha') return;
-    if (x.tipo === 'outro') months.push(Comissoes.competencia({ admissao: null, contratoInicio: x.contratoData, fatura: { recebimento: x.fatRecebimento } }, p));
+    if (x.tipo === 'outro') months.push(Comissoes.competencia({ admissao: null, contratoInicio: x.contratoData, fatura: { status: x.fatRecebimento ? 'recebida' : 'aberta', recebimento: x.fatRecebimento } }, p));
     else db.jobs.filter(j => j.fin && (x.tipo === 'vaga_extra' ? j.id === x.jobId : j.companyId === x.companyId)).forEach(j => months.push(Comissoes.competencia(j.fin, p))); });
   return !months.some(monthClosed);
 }
