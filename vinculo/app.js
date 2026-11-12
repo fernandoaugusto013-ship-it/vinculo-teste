@@ -2139,7 +2139,55 @@ function oppWinModal(id) {
       : `<div class="fg">${fld('Empresa cliente cadastrada', sel('companyId', db.companies.map(c => [c.id, c.name]), o.companyId, 'Escolha', 'required'))}${D('Início do contrato', 'contratoData', o.contratoData)}</div><p class="xs mut">Todas as vagas desta empresa com fatura em até ${payParams().carteiraMeses} meses do início do contrato geram originação.</p>`;
   openModal(o.status === 'ganha' ? 'Editar oportunidade ganha' : 'Marcar como ganha', `<p class="sm mut mb">${esc(o.empresa)} — ${esc((by('users', o.userId) || {}).name || '')}</p><form data-form="oppWin" data-id="${o.id}" class="stack">${body}<div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Salvar</button></div></form>`);
 }
-const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['oportunidades', 'Oportunidades'], ['extratos', 'Extratos'], ['parametros', 'Parâmetros']];
+/* ---------- Coordenação: ajustes e fechamento ---------- */
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+function addAdjust(u, userId, month, valor, motivo) {
+  if (finAccess(u) !== 'admin') return { ok: false, error: 'Sem permissão' };
+  const r = by('users', userId), v = paramNum(valor), mt = String(motivo || '').trim();
+  if (!r || r.role !== 'recruiter') return { ok: false, error: 'Escolha a recrutadora.' };
+  if (!MONTH_RE.test(month || '')) return { ok: false, error: 'Mês inválido.' };
+  if (!Number.isFinite(v) || v === 0) return { ok: false, error: 'Informe um valor diferente de zero (use sinal de menos para desconto).' };
+  if (!mt) return { ok: false, error: 'Informe o motivo do ajuste.' };
+  if (monthClosed(month)) return { ok: false, error: 'Mês fechado: lance o ajuste no mês seguinte.' };
+  db.payAdjust.push({ id: uid('aj'), userId, month, valor: Comissoes.round2(v), motivo: mt, by: u.id, at: nowISO() });
+  audit('Ajuste de comissão', r.name + ' — ' + ymTxt(month) + ' — ' + money(v)); save(); return { ok: true };
+}
+function closePayMonth(u, month) {
+  if (finAccess(u) !== 'admin') return { ok: false, error: 'Sem permissão' };
+  if (!MONTH_RE.test(month || '')) return { ok: false, error: 'Mês inválido' };
+  if (month >= monthKey(new Date())) return { ok: false, error: 'Só é possível fechar meses já encerrados.' };
+  if (monthClosed(month)) return { ok: false, error: 'Este mês já está fechado.' };
+  const jobs = payJobs(), p = payParams();
+  const recs = db.users.filter(r => r.role === 'recruiter' && (r.active !== false || Comissoes.extrato(month, r, jobs, db.payAdjust, p).linhas.length));
+  const statements = recs.map(r => ({ userId: r.id, extrato: Comissoes.extrato(month, r, jobs, db.payAdjust, p) }));
+  db.payClosings.push({ month, closedAt: nowISO(), closedBy: u.id, statements });
+  audit('Mês de comissões fechado', ymTxt(month)); save(); return { ok: true };
+}
+function coordView(u) {
+  const months = payMonths(); if (!months.includes(ui.coordMonth)) ui.coordMonth = months[1];
+  const m = ui.coordMonth, closed = monthClosed(m), cur = monthKey(new Date()), p = payParams(), jobs = payJobs();
+  const recs = db.users.filter(r => r.role === 'recruiter');
+  const rows = recs.map(r => ({ r, ex: payStatement(u, m, r.id) })).filter(x => x.ex && (x.r.active !== false || x.ex.linhas.length));
+  const sumT = (ex, t) => Comissoes.round2(ex.linhas.filter(l => l.tipo === t).reduce((a, l) => a + l.valor, 0));
+  const tot = Comissoes.round2(rows.reduce((a, x) => a + x.ex.total, 0));
+  const head = `<div class="flex between wrap gap mb" style="align-items:flex-end">${fld('Mês de referência', sel('coordMonth', months.map(x => [x, ymTxt(x) + (monthClosed(x) ? ' — fechado' : x === cur ? ' — em andamento' : '')]), m, null, 'data-act="paySel" data-k="coordMonth"'))}
+    ${closed ? '<span class="badge" style="--c:var(--green)">Mês fechado</span>' : m < cur ? `<button class="btn pri" data-act="payClose" data-m="${m}">Fechar ${ymTxt(m)}</button>` : '<span class="sm mut">O mês só pode ser fechado depois que terminar.</span>'}</div>`;
+  const recCard = `<section class="card mb" id="coord-rec"><h3>Recrutadoras — ${ymTxt(m)} · total ${money(tot)}</h3><div class="tw"><table><thead><tr><th>Recrutador(a)</th><th>Meta</th><th>Valor base</th><th>Comissões</th><th>Originação</th><th>Ajustes</th><th>Total</th></tr></thead><tbody>${rows.map(({ r, ex }) => `<tr><td><b>${esc(r.name)}</b>${r.active === false ? ' <span class="xs mut">(inativa)</span>' : ''}</td><td>${Math.round(((ex.meta || {}).pct || 0) * 100)}%</td><td class="fin-v">${money(ex.valorBase)}</td><td class="fin-v">${money(sumT(ex, 'comissao'))}</td><td class="fin-v">${money(sumT(ex, 'originacao'))}</td><td class="fin-v">${money(sumT(ex, 'ajuste'))}</td><td class="fin-v"><b>${money(ex.total)}</b></td></tr>`).join('')}</tbody></table></div><p class="xs mut mt-s">Pagamento em ${brDate(Comissoes.nextMonth(m) + '-' + String(p.diaPagamento).padStart(2, '0'))}.</p></section>`;
+  const hoje = todayISO(), open = db.jobs.filter(j => j.fin && j.fin.aprovacao && j.fin.fatura && j.fin.fatura.status !== 'recebida' && !['reposicao', 'cancelada', 'congelada'].includes(j.fin.status));
+  const fatCard = `<section class="card mb" id="coord-fat"><h3>Faturas em aberto (${open.length})</h3>${open.length ? `<div class="tw"><table><thead><tr><th>Cliente</th><th>Vaga</th><th>Valor</th><th>Situação</th><th></th></tr></thead><tbody>${open.map(j => { const f = j.fin.fatura, ref = f.emissao || j.fin.aprovacao, d = Math.max(0, Comissoes.diffDays(ref, hoje));
+    return `<tr><td>${esc(compName(j.companyId))}</td><td>${esc(j.title)}</td><td class="fin-v">${money(j.fin.valor)}</td><td>${f.emissao ? `Emitida em ${brDate(f.emissao)} · ${d} ${d === 1 ? 'dia' : 'dias'} em aberto` : `Não emitida · aprovada há ${d} ${d === 1 ? 'dia' : 'dias'}`}</td><td style="text-align:right"><a class="btn sm" href="#/s/vaga/${j.id}/financeiro">Abrir</a></td></tr>`; }).join('')}</tbody></table></div>` : '<p class="mut sm">Nenhuma fatura em aberto.</p>'}</section>`;
+  const agu = open.map(j => { const fj = finJob(j); return { j, parts: (j.fin.parts || []).map(x => ({ x, c: Comissoes.comissaoVaga(fj, x.userId, p) })).filter(y => y.c.ok) }; }).filter(y => y.parts.length);
+  const aguTot = Comissoes.round2(agu.reduce((a, y) => a + y.parts.reduce((b, z) => b + z.c.valor, 0), 0));
+  const aguCard = `<section class="card mb" id="coord-agu"><h3>Comissões aguardando recebimento · ${money(aguTot)}</h3>${agu.length ? `<ul class="fin-list">${agu.map(y => y.parts.map(z => `<li><span>${esc((by('users', z.x.userId) || {}).name || '—')} — ${esc(y.j.title)} <span class="xs mut">(${esc(compName(y.j.companyId))})</span></span><b>${money(z.c.valor)}</b></li>`).join('')).join('')}</ul>` : '<p class="mut sm">Nenhuma.</p>'}</section>`;
+  const adjMonths = [cur, Comissoes.nextMonth(cur)].concat(months.slice(1)).filter((x, i, a) => a.indexOf(x) === i && !monthClosed(x));
+  const list = db.payAdjust.slice().sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30);
+  const adjCard = `<section class="card mb" id="coord-adj"><h3>Ajustes manuais</h3><p class="sm mut mb">Use para descontos, bônus e estornos (por exemplo, reposição de vaga). Valores negativos descontam. Meses fechados não aceitam ajustes: lance no mês seguinte.</p>
+    <form data-form="payAdj" class="stack"><div class="fg">${fld('Recrutador(a)', sel('userId', recs.map(r => [r.id, r.name]), '', 'Escolha', 'required'))}${fld('Mês do extrato', sel('month', adjMonths.map(x => [x, ymTxt(x)]), cur))}${fld('Valor (R$)', inp('valor', '', { type: 'number', req: 1, attrs: 'step="0.01"' }))}${fld('Motivo', inp('motivo', '', { req: 1 }))}</div>
+    <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Lançar ajuste</button></div></form>
+    ${list.length ? `<div class="tw mt-s"><table><thead><tr><th>Recrutador(a)</th><th>Mês</th><th>Motivo</th><th>Valor</th><th>Lançado</th></tr></thead><tbody>${list.map(a => `<tr><td>${esc((by('users', a.userId) || {}).name || '—')}</td><td>${ymTxt(a.month)}</td><td>${esc(a.motivo)}</td><td class="fin-v">${money(a.valor)}</td><td class="xs mut">${brDate(a.at.slice(0, 10))} · ${esc((by('users', a.by) || {}).name || '')}</td></tr>`).join('')}</tbody></table></div>` : ''}</section>`;
+  return head + recCard + fatCard + aguCard + adjCard;
+}
+const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['oportunidades', 'Oportunidades'], ['extratos', 'Extratos'], ['coordenacao', 'Coordenação'], ['parametros', 'Parâmetros']];
 /* ---------- Painel do recrutador ---------- */
 const todayISO = () => { const t = new Date(), z = n => String(n).padStart(2, '0'); return t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate()); };
 function painelHtml(target) {
@@ -2190,8 +2238,8 @@ function comissoesView(c) {
   }
   const tab = COM_TABS.some(x => x[0] === (c || '')) ? (c || '') : '';
   if (tab !== 'parametros') ui.paramEdit = false;
-  const sub = { oportunidades: 'Empresas registradas pelas recrutadoras e originação.', '': 'Vagas que ainda precisam do financeiro preenchido.', com: 'Vagas com financeiro preenchido, para conferência e correção.', extratos: 'Escolha a recrutadora e o mês para ver o extrato.', parametros: 'Valores da política usados em todos os cálculos.' }[tab];
-  const body = tab === 'oportunidades' ? oppsView(u, true) : tab === 'com' ? finComHtml() : tab === 'extratos' ? extratoPage(u, true) + polCard() : tab === 'parametros' ? paramsBody() : finPendingHtml();
+  const sub = { coordenacao: 'Totais do mês, faturas em aberto, ajustes e fechamento.', oportunidades: 'Empresas registradas pelas recrutadoras e originação.', '': 'Vagas que ainda precisam do financeiro preenchido.', com: 'Vagas com financeiro preenchido, para conferência e correção.', extratos: 'Escolha a recrutadora e o mês para ver o extrato.', parametros: 'Valores da política usados em todos os cálculos.' }[tab];
+  const body = tab === 'coordenacao' ? coordView(u) : tab === 'oportunidades' ? oppsView(u, true) : tab === 'com' ? finComHtml() : tab === 'extratos' ? extratoPage(u, true) + polCard() : tab === 'parametros' ? paramsBody() : finPendingHtml();
   return shell(pageHead('Comissões', sub) + finEnv() + comTabs(tab) + body);
 }
 
@@ -2317,6 +2365,8 @@ const actions = {
   finRemoveDo(t) { const r = removeJobFin(curUser(), t.dataset.id); closeModal(); if (!r.ok) return toast(r.error === 'Mês fechado' ? 'Mês fechado: esta comissão já foi paga. Use um ajuste na coordenação.' : r.error, true); toast('Financeiro removido. A vaga voltou para "Vagas sem financeiro".'); render(true); },
   oppWin(t) { if (curUser().role === 'admin') oppWinModal(t.dataset.id); },
   oppLost(t) { const r = updateOpp(curUser(), t.dataset.id, { status: 'perdida' }); if (!r.ok) return toast(r.error, true); toast('Oportunidade marcada como perdida.'); render(true); },
+  payClose(t) { const m = t.dataset.m; confirmBox('Fechar mês', `Fechar ${ymTxt(m)}? Os extratos deste mês ficam congelados: mudanças em parâmetros ou vagas não os alteram mais. Correções depois disso só por ajuste no mês seguinte. Não é possível reabrir.`, 'Fechar mês', 'payCloseDo', { m }); },
+  payCloseDo(t) { const r = closePayMonth(curUser(), t.dataset.m); closeModal(); if (!r.ok) return toast(r.error, true); toast('Mês fechado. Extratos congelados.'); render(true); },
   paySel(t) { ui[t.dataset.k] = t.value; render(true); },
   finPreview() { const f = $('form[data-form="jobFin"]'), box = $('#fin-prev'); if (f && box) box.innerHTML = finPreviewHtml(readJobFin(f)); },
   finSplit() { const f = $('form[data-form="jobFin"]'); if (!f) return; f.elements.p1_pct.value = 50; f.elements.p2_pct.value = 50; },
@@ -2518,6 +2568,10 @@ const actions = {
 
 /* ---------- Formulários (data-form) ---------- */
 const forms = {
+  payAdj(f) {
+    const fd = new FormData(f), r = addAdjust(curUser(), fd.get('userId'), fd.get('month'), fd.get('valor'), fd.get('motivo'));
+    if (!r.ok) return toast(r.error, true); toast('Ajuste lançado.'); render(true);
+  },
   opp(f) {
     const fd = new FormData(f), r = saveOpp(curUser(), { userId: fd.get('userId'), empresa: fd.get('empresa'), contato: fd.get('contato'), tipo: fd.get('tipo'), servico: fd.get('servico') });
     if (!r.ok) { const m = $('#opp-msg'); if (m) m.innerHTML = `<p class="fin-warn">${esc(r.error)}</p>`; return toast(r.error, true); }
@@ -2839,5 +2893,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin, empresaKey, saveOpp, updateOpp, oppsFor }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin, empresaKey, saveOpp, updateOpp, oppsFor, addAdjust, closeMonth: closePayMonth }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();

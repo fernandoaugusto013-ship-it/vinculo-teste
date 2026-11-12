@@ -1,5 +1,5 @@
 import json
-ROUTES = ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/extratos', '#/s/comissoes/parametros',
+ROUTES = ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/coordenacao', '#/s/comissoes/extratos', '#/s/comissoes/parametros',
           '#/s/comissoes/u_rec2', '#/s/comissoes?user=u_rec2', '#/s/comissoes/extratos?user=u_rec2']
 
 def seed_rec2(app):
@@ -72,7 +72,7 @@ def test_contrast_light_and_dark(app):
         app.ev("([e, st]) => { const r = __V.fin.saveOpp(__V.db.users.find(x => x.id === 'u_admin'), { userId: 'u_rec1', empresa: e, contato: 'c', tipo: 'vaga_extra', servico: '' }); if (st !== 'aberta') __V.fin.updateOpp(__V.db.users.find(x => x.id === 'u_admin'), r.id, { status: st }); }", [e, st])
     jid = app.ev("() => __V.db.jobs[0].id")
     for theme in ['light', 'dark']:
-        for h in ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/oportunidades', '#/s/comissoes/extratos', '#/s/comissoes/parametros', f'#/s/vaga/{jid}/financeiro']:
+        for h in ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/oportunidades', '#/s/comissoes/extratos', '#/s/comissoes/coordenacao', '#/s/comissoes/parametros', f'#/s/vaga/{jid}/financeiro']:
             app.go(h); app.ev(f"() => {{ document.documentElement.setAttribute('data-theme', '{theme}'); document.documentElement.style.colorScheme = '{theme}'; }}")
             app.page.wait_for_timeout(150)
             bad = app.ev(CONTRAST); assert bad == [], (theme, h, bad[:6])
