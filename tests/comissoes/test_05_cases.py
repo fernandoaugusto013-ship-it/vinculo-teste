@@ -33,7 +33,7 @@ def test_recruiter_cannot_load(app):
     assert app.ev("() => (__V.db.payDemo.users || []).length") == 0
 
 def test_ui_button_and_not_elsewhere(app):
-    app.login('u_admin'); app.go('#/s/comissoes')
+    app.login('u_admin'); app.go('#/s/comissoes/extratos')
     app.page.click('[data-act="polLoad"]'); app.page.wait_for_timeout(300)
     assert 'Caso 1 — meta atingida' in app.main()
     app.go('#/s/comissoes/extratos')
@@ -43,6 +43,6 @@ def test_ui_button_and_not_elsewhere(app):
     t = app.main(); assert 'R$ 3.979,05' in t and 'Originação' in t
     for h in ['#/s/metas', '#/s/vagas', '#/s/usuarios', '#/s/kanban']:
         app.go(h); app.page.wait_for_timeout(150); assert 'Caso 1 — meta atingida' not in app.main(), h
-    app.go('#/s/comissoes'); app.page.click('[data-act="polRemove"]'); app.page.wait_for_timeout(300)
+    app.go('#/s/comissoes/extratos'); app.page.click('[data-act="polRemove"]'); app.page.wait_for_timeout(300)
     assert app.ev("() => __V.db.payDemo.users.length") == 0
     assert app.errors == []

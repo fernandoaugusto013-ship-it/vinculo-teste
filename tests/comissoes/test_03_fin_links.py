@@ -28,5 +28,5 @@ def test_comissoes_lists_pending_jobs(app):
     app.ev("([j, d]) => __V.fin.saveJobFin(__V.db.users.find(x => x.id === 'u_admin'), j, d)", [jid, FIN])
     app.ev('() => __V.render()'); app.page.wait_for_timeout(150)
     assert app.page.locator('#fin-pend a[href$="/financeiro"]').count() == pend - 1
-    assert 'Salvar parâmetros' in app.main()
+    assert 'Salvar parâmetros' not in app.main() and app.page.locator('form[data-form="payParams"]').count() == 0
     assert app.errors == []

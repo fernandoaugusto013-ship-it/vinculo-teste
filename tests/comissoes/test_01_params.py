@@ -50,11 +50,13 @@ def test_table_editable(app):
 def test_params_screen_edit_via_ui(app):
     app.login('u_admin'); app.go('#/s/comissoes/parametros')
     assert 'Ambiente de teste' in app.main()
+    app.page.click('[data-act="paramEdit"]'); app.page.wait_for_timeout(150)
     app.page.fill('[name=metaBase]', '5000'); app.page.fill('[name=impostos]', '12')
     app.page.click('form[data-form="payParams"] button.pri'); app.page.wait_for_timeout(300)
     p = app.ev("() => __V.fin.payParams()")
     assert p['metaBase'] == 5000 and abs(p['impostos'] - 0.12) < 1e-9
     assert app.page.locator('.fin-hist tbody tr').count() == 2
+    app.page.click('[data-act="paramEdit"]'); app.page.wait_for_timeout(150)
     app.page.fill('[name=impostos]', '150'); app.page.click('form[data-form="payParams"] button.pri'); app.page.wait_for_timeout(300)
     assert abs(app.ev("() => __V.fin.payParams().impostos") - 0.12) < 1e-9 and app.errors == []
 

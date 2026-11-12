@@ -1968,16 +1968,17 @@ function finPendingHtml() {
   const list = db.jobs.filter(j => j.status !== 'draft' && !j.fin).sort((a, b) => new Date(b.pubDate || 0) - new Date(a.pubDate || 0));
   return `<section class="card mb" id="fin-pend"><h3>Vagas sem financeiro (${list.length})</h3>${list.length ? `<div class="tw"><table><thead><tr><th>Vaga</th><th>Empresa</th><th>Status</th><th></th></tr></thead><tbody>${list.map(j => `<tr><td class="b">${esc(j.title)}</td><td>${esc(compName(j.companyId))}</td><td>${jobStBadge(j.status)}</td><td style="text-align:right"><a class="btn sm pri" href="#/s/vaga/${j.id}/financeiro">Preencher financeiro</a></td></tr>`).join('')}</tbody></table></div>` : '<p class="mut sm">Todas as vagas publicadas já têm o financeiro preenchido.</p>'}</section>`;
 }
-function paramsView(top) {
+function paramsBody() {
+  const ed = !!ui.paramEdit;
   const p = payParams(), field = k => fld(PARAM_LABEL[k], inp(k, PARAM_PCT.includes(k) ? Math.round(p[k] * 10000) / 100 : p[k], { type: 'number', req: true, attrs: 'step="any" min="0"' }));
   const grp = (t, ks) => `<section class="card mb"><h3>${t}</h3><div class="fg">${ks.map(field).join('')}</div></section>`;
   const tab = tp => `<div><h4>${tp === 'geral' ? 'Vaga geral' : 'Vaga contábil'} (dias corridos)</h4>${p.tabelas[tp].map((r, i, a) => `<div class="fin-row"><span>${i === a.length - 1 ? 'Acima de ' + (a[i - 1] ? a[i - 1].ate : 0) + ' dias' : (i === 0 ? 'Até' : 'Até') }</span>${i === a.length - 1 ? '' : `<input type="number" name="t_${tp}_${i}_ate" value="${r.ate}" min="0" step="1" aria-label="Limite de dias da faixa ${i + 1}" required>`}<span>dias →</span><input type="number" name="t_${tp}_${i}_pct" value="${Math.round(r.pct * 10000) / 100}" min="0" max="100" step="any" aria-label="Percentual da faixa ${i + 1}" required><span>%</span></div>`).join('')}</div>`;
   const hist = db.payParams.history.slice(0, 30).map(h => `<tr><td>${fdate(h.at)}</td><td>${esc(h.by)}</td><td>${esc(PARAM_LABEL[h.key] || h.key)}</td><td>${esc(typeof h.from === 'object' ? JSON.stringify(h.from) : h.from)}</td><td>${esc(typeof h.to === 'object' ? JSON.stringify(h.to) : h.to)}</td></tr>`).join('');
-  return shell(pageHead('Parâmetros de comissão', 'Todos os valores da política são editáveis. As alterações valem para os próximos cálculos.') + finEnv() + (top || '') +
-    `<form data-form="payParams" class="stack">${grp('Percentuais', ['impostos', 'despesas', 'faixaMinima', 'origPct'])}${grp('Valores', ['gupy', 'metaBase', 'metaAdaptacao', 'valorBase', 'ajudaCusto', 'das'])}${grp('Prazos e datas', ['carteiraMeses', 'clienteNovoMeses', 'carenciaDias', 'adaptacaoMeses', 'diaPagamento', 'diaPlanilha', 'diaConferencia', 'toleranciaDiasUteis', 'alertaDias'])}
+  return `<div class="flex between wrap gap mb"><p class="sm mut">${ed ? '<b>Modo de edição.</b> Revise antes de salvar: as alterações valem para os próximos cálculos.' : 'Parâmetros travados para evitar alterações por engano.'}</p>${ed ? '' : '<button type="button" class="btn sm" data-act="paramEdit">Editar parâmetros</button>'}</div>
+    <form data-form="payParams" class="stack"><fieldset class="fin-fs" ${ed ? '' : 'disabled'}>${grp('Percentuais', ['impostos', 'despesas', 'faixaMinima', 'origPct'])}${grp('Valores', ['gupy', 'metaBase', 'metaAdaptacao', 'valorBase', 'ajudaCusto', 'das'])}${grp('Prazos e datas', ['carteiraMeses', 'clienteNovoMeses', 'carenciaDias', 'adaptacaoMeses', 'diaPagamento', 'diaPlanilha', 'diaConferencia', 'toleranciaDiasUteis', 'alertaDias'])}
     <section class="card mb"><h3>Comissão por prazo de fechamento</h3><div class="g2">${tab('geral')}${tab('contabil')}</div></section>
-    <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Salvar parâmetros</button></div></form>
-    <section class="card mt"><h3>Histórico de alterações</h3>${hist ? `<div class="tw"><table class="fin-hist"><thead><tr><th>Quando</th><th>Quem</th><th>Parâmetro</th><th>De</th><th>Para</th></tr></thead><tbody>${hist}</tbody></table></div>` : '<p class="mut">Nenhuma alteração até agora.</p>'}</section>`);
+    </fieldset>${ed ? '<div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="paramCancel">Cancelar</button><button type="submit" class="btn pri">Salvar parâmetros</button></div>' : ''}</form>
+    <section class="card mt"><h3>Histórico de alterações</h3>${hist ? `<div class="tw"><table class="fin-hist"><thead><tr><th>Quando</th><th>Quem</th><th>Parâmetro</th><th>De</th><th>Para</th></tr></thead><tbody>${hist}</tbody></table></div>` : '<p class="mut">Nenhuma alteração até agora.</p>'}</section>`;
 }
 /* ---------- Extratos ---------- */
 const payMonths = () => { const cur = monthKey(new Date()); return [0, 1, 2, 3, 4, 5, 6].map(i => Comissoes.nextMonth(cur, -i)); };
@@ -2051,15 +2052,32 @@ const polCard = () => { const on = db.payDemo.users.length > 0;
   return `<section class="card mb"><h3>Casos da política (teste)</h3><p class="sm mut">Cria 3 recrutadoras fictícias com as vagas dos exemplos do documento, no mês atual, para conferir os totais nos Extratos. Elas não aparecem em Vagas, Metas nem Usuários e não recebem avisos.</p>
   ${on ? `<p class="sm mt-s">Carregados: ${db.payDemo.users.map(x => `<b>${esc(x.name)}</b>`).join(', ')}.</p>` : ''}
   <div class="flex gap wrap mt-s"><button class="btn sm pri" data-act="polLoad">${on ? 'Recarregar casos' : 'Carregar casos da política'}</button>${on ? `<a class="btn sm" href="#/s/comissoes/extratos">Ver extratos</a><button class="btn sm" data-act="polRemove">Remover casos</button>` : ''}</div></section>`; };
-const comTabs = c => `<div class="opts mb">${[['', 'Parâmetros'], ['extratos', 'Extratos']].map(x => `<a class="btn sm ${(c || '') === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}">${x[1]}</a>`).join(' ')}</div>`;
+const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['extratos', 'Extratos'], ['parametros', 'Parâmetros']];
+const comTabs = c => `<nav class="fin-tabs mb" aria-label="Seções de comissões">${COM_TABS.map(x => `<a class="btn sm ${(c || '') === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}"${(c || '') === x[0] ? ' aria-current="page"' : ''}>${x[1]}</a>`).join('')}</nav>`;
+const FIN_SIT = [['', 'Todas as situações'], ['aprovacao', 'Aguardando aprovação'], ['fatura', 'Aguardando fatura'], ['extrato', 'Com mês de extrato'], ['sem', 'Sem comissão (status)']];
+function finSituation(j) {
+  const f = j.fin, p = payParams();
+  if (['reposicao', 'cancelada', 'congelada'].includes(f.status)) return ['sem', 'Sem comissão (' + (FIN_STATUS.find(x => x[0] === f.status) || [0, f.status])[1].toLowerCase() + ')'];
+  if (!f.aprovacao) return ['aprovacao', 'Aguardando aprovação'];
+  const comp = Comissoes.competencia(f, p); if (!comp) return ['fatura', 'Aguardando fatura'];
+  return ['extrato', 'Entra no extrato de ' + ymTxt(comp)];
+}
+function finComHtml() {
+  const all = db.jobs.filter(j => j.fin), sit = ui.finSit || '', list = all.map(j => ({ j, s: finSituation(j), sum: jobFinSummary(j) })).filter(x => !sit || x.s[0] === sit);
+  const pick = `<div class="flex gap wrap mb" style="align-items:flex-end">${fld('Situação', sel('finSit', FIN_SIT, sit, null, 'data-act="paySel" data-k="finSit"'))}<span class="sm mut">${list.length} de ${all.length} ${all.length === 1 ? 'vaga' : 'vagas'}</span></div>`;
+  return `<section class="card mb" id="fin-com"><h3>Vagas com financeiro</h3><p class="sm mut mb">Confira os valores e corrija o que estiver errado. Para tirar o financeiro de uma vaga, abra-a e use "Remover financeiro".</p>${pick}${list.length ? `<div class="tw"><table><thead><tr><th>Vaga</th><th>Valor</th><th>Prazo</th><th>Faixa</th><th>Comissão</th><th>Situação</th><th></th></tr></thead><tbody>${list.map(({ j, s, sum }) => `<tr data-id="${j.id}"><td><b>${esc(j.title)}</b><div class="xs mut">${esc(compName(j.companyId))}</div></td><td class="fin-v">${money(j.fin.valor)}</td><td>${sum && sum.prazo != null ? sum.prazo + ' dias' : '—'}</td><td>${sum && sum.prazo != null ? Math.round(sum.pct * 100) + '%' : '—'}</td><td class="fin-v">${sum && sum.prazo != null ? money(sum.comissao) : '—'}</td><td><span class="badge" style="--c:var(${s[0] === 'extrato' ? '--green' : s[0] === 'sem' ? '--red' : '--coral'})">${esc(s[1])}</span></td><td style="text-align:right"><a class="btn sm" href="#/s/vaga/${j.id}/financeiro">Editar</a></td></tr>`).join('')}</tbody></table></div>` : `<p class="mut sm">${all.length ? 'Nenhuma vaga nesta situação.' : 'Nenhuma vaga com financeiro ainda. Preencha pela aba "Vagas sem financeiro".'}</p>`}</section>`;
+}
 function comissoesView(c) {
   const u = curUser(), acc = finAccess(u); if (!acc) return denied();
-  if (c === 'parametros' && acc !== 'admin') return denied();
-  if (acc === 'admin') {
-    if (c === 'extratos') return shell(pageHead('Extratos', 'Escolha a recrutadora e o mês para ver o extrato.') + finEnv() + comTabs('extratos') + extratoPage(u, true));
-    return paramsView(comTabs('') + polCard() + finPendingHtml());
+  if (acc !== 'admin') {
+    if (c === 'parametros') return denied();
+    return shell(pageHead('Minhas comissões', 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + extratoPage(u, false));
   }
-  return shell(pageHead('Minhas comissões', 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + extratoPage(u, false));
+  const tab = COM_TABS.some(x => x[0] === (c || '')) ? (c || '') : '';
+  if (tab !== 'parametros') ui.paramEdit = false;
+  const sub = { '': 'Vagas que ainda precisam do financeiro preenchido.', com: 'Vagas com financeiro preenchido, para conferência e correção.', extratos: 'Escolha a recrutadora e o mês para ver o extrato.', parametros: 'Valores da política usados em todos os cálculos.' }[tab];
+  const body = tab === 'com' ? finComHtml() : tab === 'extratos' ? extratoPage(u, true) + polCard() : tab === 'parametros' ? paramsBody() : finPendingHtml();
+  return shell(pageHead('Comissões', sub) + finEnv() + comTabs(tab) + body);
 }
 
 /* ---------- Financeiro da vaga (somente coordenação) ---------- */
@@ -2120,6 +2138,12 @@ function saveJobFin(u, jobId, data, force) {
   j.fin = n; if (!same) { audit('Financeiro da vaga atualizado', j.title); save(); }
   return { ok: true };
 }
+function removeJobFin(u, jobId, force) {
+  if (finAccess(u) !== 'admin') return { ok: false, error: 'Sem permissão' };
+  const j = by('jobs', jobId); if (!j || !j.fin) return { ok: false, error: 'Vaga sem financeiro' };
+  if (!force && monthClosed(Comissoes.competencia(j.fin, payParams()))) return { ok: false, error: 'Mês fechado' };
+  delete j.fin; audit('Financeiro da vaga removido', j.title); save(); return { ok: true };
+}
 function jobFinSummary(j) {
   if (!j || !j.fin) return null; const p = payParams(), f = j.fin, prazo = Comissoes.prazo(f); if (prazo === null) return { prazo: null };
   const liq = Comissoes.liquido(f.valor, f.gupy, p), fx = Comissoes.faixa(f.tipo, prazo, p);
@@ -2155,13 +2179,17 @@ function jobFinView(id) {
   <p class="mt-s"><button type="button" class="btn sm" data-act="finSplit">Dividir 50/50</button></p></section>
   <section class="card mb"><h3>Originação (opcional)</h3><div class="fg">${fld('Originada por', sel('originadaPor', recs, f.originadaPor, 'Ninguém'))}${fld('Tipo', sel('origTipo', FIN_ORIG, f.origTipo, 'Escolha'))}${d('Início do contrato', ['contratoInicio', f.contratoInicio])}</div></section>
   <section class="card mb"><h3>Cálculo</h3><div id="fin-prev">${finPreviewHtml(readJobFinFrom(f))}</div><p class="mt-s"><button type="button" class="btn sm" data-act="finPreview">Calcular</button></p></section>
-  <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Salvar financeiro</button></div></form>`);
+  <div class="flex gap wrap" style="justify-content:flex-end">${j.fin ? `<button type="button" class="btn danger" data-act="finRemove" data-id="${j.id}">Remover financeiro</button>` : ''}<button type="submit" class="btn pri">Salvar financeiro</button></div></form>`);
 }
 const readJobFinFrom = f => ({ tipo: f.tipo, valor: f.valor, gupy: f.gupy, alinhamento: f.alinhamento, aprovacao: f.aprovacao, diasSuspensos: f.diasSuspensos, admissao: f.admissao, status: f.status, garantia: f.garantia, fatura: f.fatura, parts: f.parts, originadaPor: f.originadaPor, origTipo: f.origTipo, contratoInicio: f.contratoInicio });
 
 const actions = {
   polLoad() { const u = curUser(), r = loadPolicyCases(u, monthKey(new Date())); if (!r.ok) return toast(r.error, true); ui.payUser = r.users[0]; ui.payMonth = monthKey(new Date()); toast('Casos da política carregados. Veja na aba Extratos.'); render(true); },
   polRemove() { const r = removePolicyCases(curUser()); if (!r.ok) return toast(r.error, true); toast('Casos da política removidos.'); render(true); },
+  paramEdit() { if (curUser().role === 'admin') { ui.paramEdit = true; render(true); } },
+  paramCancel() { ui.paramEdit = false; render(true); },
+  finRemove(t) { const j = by('jobs', t.dataset.id); if (j && j.fin) confirmBox('Remover financeiro', `Remover o financeiro da vaga "${esc(j.title)}"? Ela volta para "Vagas sem financeiro" e as comissões dela saem dos extratos em aberto.`, 'Remover', 'finRemoveDo', { id: j.id }, true); },
+  finRemoveDo(t) { const r = removeJobFin(curUser(), t.dataset.id); closeModal(); if (!r.ok) return toast(r.error === 'Mês fechado' ? 'Mês fechado: esta comissão já foi paga. Use um ajuste na coordenação.' : r.error, true); toast('Financeiro removido. A vaga voltou para "Vagas sem financeiro".'); render(true); },
   paySel(t) { ui[t.dataset.k] = t.value; render(true); },
   finPreview() { const f = $('form[data-form="jobFin"]'), box = $('#fin-prev'); if (f && box) box.innerHTML = finPreviewHtml(readJobFin(f)); },
   finSplit() { const f = $('form[data-form="jobFin"]'); if (!f) return; f.elements.p1_pct.value = 50; f.elements.p2_pct.value = 50; },
@@ -2373,7 +2401,7 @@ const forms = {
     patch.tabelas = JSON.parse(JSON.stringify(p.tabelas));
     ['geral', 'contabil'].forEach(tp => patch.tabelas[tp].forEach((r, i, a) => { r.pct = paramNum(fd.get(`t_${tp}_${i}_pct`)) / 100; if (i < a.length - 1) r.ate = paramNum(fd.get(`t_${tp}_${i}_ate`)); }));
     const r = savePayParams(u, patch); if (!r.ok) return toast(r.errors[0], true);
-    toast(r.changed ? 'Parâmetros salvos.' : 'Nenhuma alteração.'); render(true);
+    ui.paramEdit = false; toast(r.changed ? 'Parâmetros salvos.' : 'Nenhuma alteração.'); render(true);
   },
   goalAdmin(f) {
     const u = curUser(); if (u.role !== 'admin') return; const fd = new FormData(f), metric = fd.get('metric'), month = fd.get('month'), recs = fd.getAll('rec');
@@ -2674,5 +2702,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();
