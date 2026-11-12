@@ -1977,11 +1977,46 @@ function paramsView(top) {
     <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Salvar parâmetros</button></div></form>
     <section class="card mt"><h3>Histórico de alterações</h3>${hist ? `<div class="tw"><table class="fin-hist"><thead><tr><th>Quando</th><th>Quem</th><th>Parâmetro</th><th>De</th><th>Para</th></tr></thead><tbody>${hist}</tbody></table></div>` : '<p class="mut">Nenhuma alteração até agora.</p>'}</section>`);
 }
+/* ---------- Extratos ---------- */
+const payMonths = () => { const cur = monthKey(new Date()); return [0, 1, 2, 3, 4, 5, 6].map(i => Comissoes.nextMonth(cur, -i)); };
+const payRecruiters = () => db.users.filter(x => x.role === 'recruiter');
+function payStatement(u, month, userId) {
+  const acc = finAccess(u); if (!acc) return null;
+  const target = acc === 'recruiter' ? u : by('users', userId); if (!target || target.role !== 'recruiter') return null;
+  const cl = db.payClosings.find(c => c.month === month), fz = cl && (cl.statements || []).find(x => x.userId === target.id);
+  if (fz) return Object.assign({}, fz.extrato, { userId: target.id, fechado: true });
+  const ex = Comissoes.extrato(month, target, db.jobs.filter(j => j.fin).map(finJob), db.payAdjust, payParams());
+  return Object.assign(ex, { userId: target.id, fechado: false });
+}
+const brDate = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : '—';
+function extratoCard(ex, target) {
+  const row = (l, v, sub) => `<tr><td>${l}${sub ? `<div class="xs mut">${sub}</div>` : ''}</td><td class="fin-v">${money(v)}</td></tr>`;
+  const mt = ex.meta || { meta: 0, realizado: 0, pct: 0 };
+  const lin = ex.linhas.length ? ex.linhas.map(l => row(esc(l.descricao), l.valor, l.tipo === 'comissao' ? 'Comissão da vaga' : l.tipo === 'originacao' ? 'Originação' : 'Ajuste da coordenação')).join('') : '<tr><td colspan="2" class="mut sm">Nenhuma comissão neste mês.</td></tr>';
+  const prev = (ex.previstas || []).reduce((a, x) => a + x.valor, 0);
+  return `<section class="card mb fin-ex"><div class="flex between wrap gap"><h3>${esc(target.name)} — ${ymTxt(ex.month)}</h3>${ex.fechado ? '<span class="badge" style="--c:var(--green)">Mês fechado</span>' : '<span class="badge">Prévia — mês em aberto</span>'}</div>
+  <div class="tw"><table class="fin-tb"><tbody>
+  ${row('Ajuda de custo', ex.ajudaCusto)}${row('DAS-MEI', ex.das)}${row('Valor base', ex.valorBase, `Meta ${money(mt.meta)} · realizado ${money(mt.realizado)} (${Math.round(mt.pct * 100)}%)`)}
+  <tr class="fin-sec"><td colspan="2">Comissões e ajustes</td></tr>${lin}
+  <tr class="fin-tot"><td>Total a pagar em ${brDate(ex.pagamentoEm)}</td><td class="fin-v">${money(ex.total)}</td></tr></tbody></table></div>
+  ${prev ? `<p class="xs mut mt-s">Comissões previstas para meses seguintes (aguardando recebimento ou carência): ${money(prev)}.</p>` : ''}</section>`;
+}
+function extratoPage(u, admin) {
+  const months = payMonths(); if (!months.includes(ui.payMonth)) ui.payMonth = months[0];
+  const recs = payRecruiters(); if (admin && !recs.some(r => r.id === ui.payUser)) ui.payUser = recs[0] ? recs[0].id : '';
+  const target = admin ? by('users', ui.payUser) : u, ex = target && payStatement(u, ui.payMonth, target.id);
+  const pick = `<div class="flex gap wrap mb" style="align-items:flex-end">${admin ? fld('Recrutador(a)', sel('payUser', recs.map(r => [r.id, r.name + (r.active === false ? ' (inativo)' : '')]), ui.payUser, null, 'data-act="paySel" data-k="payUser"')) : ''}${fld('Mês', sel('payMonth', months.map(m => [m, ymTxt(m)]), ui.payMonth, null, 'data-act="paySel" data-k="payMonth"'))}</div>`;
+  return pick + (ex ? extratoCard(ex, target) : '<div class="empty"><b>Nenhum recrutador cadastrado.</b></div>');
+}
+const comTabs = c => `<div class="opts mb">${[['', 'Parâmetros'], ['extratos', 'Extratos']].map(x => `<a class="btn sm ${(c || '') === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}">${x[1]}</a>`).join(' ')}</div>`;
 function comissoesView(c) {
   const u = curUser(), acc = finAccess(u); if (!acc) return denied();
   if (c === 'parametros' && acc !== 'admin') return denied();
-  if (acc === 'admin') return paramsView(finPendingHtml());
-  return shell(pageHead('Minhas comissões', 'Seu extrato e suas metas financeiras.') + finEnv());
+  if (acc === 'admin') {
+    if (c === 'extratos') return shell(pageHead('Extratos', 'Escolha a recrutadora e o mês para ver o extrato.') + finEnv() + comTabs('extratos') + extratoPage(u, true));
+    return paramsView(comTabs('') + finPendingHtml());
+  }
+  return shell(pageHead('Minhas comissões', 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + extratoPage(u, false));
 }
 
 /* ---------- Financeiro da vaga (somente coordenação) ---------- */
@@ -2082,6 +2117,7 @@ function jobFinView(id) {
 const readJobFinFrom = f => ({ tipo: f.tipo, valor: f.valor, gupy: f.gupy, alinhamento: f.alinhamento, aprovacao: f.aprovacao, diasSuspensos: f.diasSuspensos, admissao: f.admissao, status: f.status, garantia: f.garantia, fatura: f.fatura, parts: f.parts, originadaPor: f.originadaPor, origTipo: f.origTipo, contratoInicio: f.contratoInicio });
 
 const actions = {
+  paySel(t) { ui[t.dataset.k] = t.value; render(true); },
   finPreview() { const f = $('form[data-form="jobFin"]'), box = $('#fin-prev'); if (f && box) box.innerHTML = finPreviewHtml(readJobFin(f)); },
   finSplit() { const f = $('form[data-form="jobFin"]'); if (!f) return; f.elements.p1_pct.value = 50; f.elements.p2_pct.value = 50; },
   metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
@@ -2593,5 +2629,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();

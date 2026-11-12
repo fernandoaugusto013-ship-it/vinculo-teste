@@ -839,3 +839,7 @@ body.lp .auth-in{animation:lpup 1.4s 1.1s cubic-bezier(.22,.61,.36,1) both}
 .fin-env{padding:8px 14px;margin:0 0 16px;border-radius:10px;border:1px dashed color-mix(in srgb,var(--sun,#c80) 60%,var(--line));background:color-mix(in srgb,var(--sun,#c80) 12%,var(--card));color:var(--ink);font-size:13px}
 .fin-row{display:flex;gap:8px;align-items:center;margin:6px 0}.fin-row input{width:90px}
 .fin-hist td{font-size:13px}
+
+.fin-tb td{padding:10px 12px}.fin-tb .fin-v{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fin-tb .fin-sec td{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);padding-top:18px}
+.fin-tb .fin-tot td{font-weight:700;font-size:1.05rem;border-top:2px solid var(--ink)}
