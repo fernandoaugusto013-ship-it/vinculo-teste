@@ -56,7 +56,7 @@ CONTRAST = """() => {
   const bgOf = el => { for (let e = el; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; const a = b.match(/[\\d.]+/g); if (a && (a.length < 4 || +a[3] > .5)) return b; } return getComputedStyle(document.body).backgroundColor; };
   const bad = [];
   document.querySelectorAll('main *, .main *').forEach(el => {
-    if (!el.closest('#opp-list, form[data-form=opp], .fin-env, .fin-tabs, #fin-pend, #fin-com, .fin-ex, .fin-tb, form[data-form=payParams], form[data-form=jobFin]')) return;
+    if (!el.closest('#fin-and, #fin-prev-list, .fin-list, .card, #opp-list, form[data-form=opp], .fin-env, .fin-tabs, #fin-pend, #fin-com, .fin-ex, .fin-tb, form[data-form=payParams], form[data-form=jobFin]')) return;
     if (el.closest('.badge.dot')) return; /* selo de status de vaga já existente no sistema (jobStBadge) — fora do escopo, reportado */
     const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()); if (!own || el.offsetParent === null) return;
     const cs = getComputedStyle(el); if (cs.visibility === 'hidden') return;

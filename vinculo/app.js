@@ -2011,7 +2011,7 @@ function extratoPage(u, admin) {
   const recs = payRecruiters(); if (admin && !recs.some(r => r.id === ui.payUser)) ui.payUser = recs[0] ? recs[0].id : '';
   const target = admin ? payUser(ui.payUser) : u, ex = target && payStatement(u, ui.payMonth, target.id);
   const pick = `<div class="flex gap wrap mb" style="align-items:flex-end">${admin ? fld('Recrutador(a)', sel('payUser', recs.map(r => [r.id, r.name + (r.active === false ? ' (inativo)' : '')]), ui.payUser, null, 'data-act="paySel" data-k="payUser"')) : ''}${fld('Mês', sel('payMonth', months.map(m => [m, ymTxt(m)]), ui.payMonth, null, 'data-act="paySel" data-k="payMonth"'))}</div>`;
-  return pick + (ex ? extratoCard(ex, target) : '<div class="empty"><b>Nenhum recrutador cadastrado.</b></div>');
+  return pick + (ex ? (admin ? painelHtml(target) : '') + extratoCard(ex, target) : '<div class="empty"><b>Nenhum recrutador cadastrado.</b></div>');
 }
 /* Casos da política (ambiente de teste): ficam só em db.payDemo — fora de Vagas, Metas, login e notificações */
 const POL_CASES = [
@@ -2140,6 +2140,31 @@ function oppWinModal(id) {
   openModal(o.status === 'ganha' ? 'Editar oportunidade ganha' : 'Marcar como ganha', `<p class="sm mut mb">${esc(o.empresa)} — ${esc((by('users', o.userId) || {}).name || '')}</p><form data-form="oppWin" data-id="${o.id}" class="stack">${body}<div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Salvar</button></div></form>`);
 }
 const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['oportunidades', 'Oportunidades'], ['extratos', 'Extratos'], ['parametros', 'Parâmetros']];
+/* ---------- Painel do recrutador ---------- */
+const todayISO = () => { const t = new Date(), z = n => String(n).padStart(2, '0'); return t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate()); };
+function painelHtml(target) {
+  const p = payParams(), month = monthKey(new Date()), jobs = payJobs(), C = Comissoes;
+  const mt = C.metaDoMes(month, target, jobs, p), ini = C.monthOf(target.startDate || ''), adapt = !!ini && month >= ini && month < C.nextMonth(ini, p.adaptacaoMeses);
+  const pct = Math.max(0, mt.pct || 0), w = Math.min(100, Math.round(pct * 100)), falta = v => Math.max(0, C.round2(v - mt.realizado));
+  const metaCard = `<section class="card mb"><div class="flex between wrap gap"><h3>Meta do mês — ${ymTxt(month)}</h3>${adapt ? '<span class="badge" style="--c:var(--blue)">Meta de adaptação</span>' : ''}</div>
+    <p class="sm"><b>${money(mt.realizado)}</b> de ${money(mt.meta)} · <b>${Math.round(pct * 100)}%</b></p>
+    <div class="fin-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${w}" aria-label="Atingimento da meta"><span style="width:${w}%"></span><i style="left:${Math.round(p.faixaMinima * 100)}%" title="Mínimo para valor base"></i></div>
+    <p class="xs mut mt-s">${pct >= 1 ? 'Meta atingida: valor base de ' + money(p.valorBase) + ' garantido.' : pct >= p.faixaMinima ? `Valor base proporcional garantido. Faltam ${money(falta(mt.meta))} para 100%.` : `Faltam ${money(falta(mt.meta * p.faixaMinima))} para chegar a ${Math.round(p.faixaMinima * 100)}% e garantir o valor base proporcional.`}</p></section>`;
+  const hoje = todayISO();
+  const and = jobs.filter(j => { const f = j.fin; return f && C.isDate(f.alinhamento) && !f.aprovacao && !['reposicao', 'cancelada', 'congelada'].includes(f.status) && (f.parts || []).some(x => x.userId === target.id); }).map(j => {
+    const f = j.fin, prazo = Math.max(0, C.diffDays(f.alinhamento, hoje) - (+f.diasSuspensos || 0)), fx = C.faixa(f.tipo, prazo, p), part = (f.parts.find(x => x.userId === target.id) || {}).pct || 0;
+    const liq = C.liquido(+f.valor, f.gupy, p), t = p.tabelas[f.tipo] || p.tabelas.geral, nx = t[fx.idx + 1], dm = C.diasParaMudar(f.tipo, prazo, p);
+    return { j, prazo, pct: fx.pct, atual: C.round2(liq * fx.pct * part / 100), prox: nx ? C.round2(liq * nx.pct * part / 100) : null, proxPct: nx ? nx.pct : null, dm };
+  }).sort((a, b) => (a.dm === null ? 1e9 : a.dm) - (b.dm === null ? 1e9 : b.dm));
+  const andCard = `<section class="card mb" id="fin-and"><h3>Vagas em andamento (${and.length})</h3>${and.length ? `<div class="tw"><table><thead><tr><th>Vaga</th><th>Prazo atual</th><th>Faixa</th><th>Comissão hoje</th><th>Próxima faixa</th></tr></thead><tbody>${and.map(x => `<tr><td><b>${esc(x.j.cargo)}</b><div class="xs mut">${esc(x.j.cliente)}</div></td><td>${x.prazo} ${x.prazo === 1 ? 'dia' : 'dias'}</td><td>${Math.round(x.pct * 100)}%</td><td class="fin-v"><b>${money(x.atual)}</b></td><td>${x.dm === null ? '<span class="mut">Última faixa</span>' : `<span class="badge" style="--c:var(${x.dm <= p.alertaDias ? '--red' : '--coral'})">Muda de faixa em ${x.dm} ${x.dm === 1 ? 'dia' : 'dias'}</span><div class="xs mut">depois: ${Math.round(x.proxPct * 100)}% · ${money(x.prox)}</div>`}</td></tr>`).join('')}</tbody></table></div>` : '<p class="mut sm">Nenhuma vaga em andamento com alinhamento registrado.</p>'}</section>`;
+  const ex = C.extrato(month, target, jobs, db.payAdjust, p), nm = id => { const j = jobs.find(x => x.id === id); return j ? j.cliente + ' — ' + j.cargo : '—'; };
+  const lib = ex.linhas.filter(l => l.tipo !== 'ajuste'), prev = ex.previstas;
+  const li = (arr, d) => arr.length ? `<ul class="fin-list">${arr.map(l => `<li><span>${esc(d(l))}${l.tipo === 'originacao' ? ' <span class="xs mut">(originação)</span>' : ''}</span><b>${money(l.valor)}</b></li>`).join('')}</ul>` : '<p class="mut sm">Nenhuma.</p>';
+  const sum = arr => C.round2(arr.reduce((a, l) => a + l.valor, 0));
+  const comCard = `<div class="g2 mb"><section class="card"><h3>Liberadas neste mês · ${money(sum(lib))}</h3><p class="xs mut mb">Pagas em ${brDate(ex.pagamentoEm)}.</p>${li(lib, l => l.descricao)}</section>
+    <section class="card" id="fin-prev-list"><h3>Previstas · ${money(sum(prev))}</h3><p class="xs mut mb">Vagas aprovadas aguardando fatura ou carência.</p>${li(prev, l => nm(l.jobId))}</section></div>`;
+  return metaCard + andCard + comCard;
+}
 const comTabs = c => `<nav class="fin-tabs mb" aria-label="Seções de comissões">${COM_TABS.map(x => `<a class="btn sm ${(c || '') === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}"${(c || '') === x[0] ? ' aria-current="page"' : ''}>${x[1]}</a>`).join('')}</nav>`;
 const FIN_SIT = [['', 'Todas as situações'], ['aprovacao', 'Aguardando aprovação'], ['fatura', 'Aguardando fatura'], ['extrato', 'Com mês de extrato'], ['sem', 'Sem comissão (status)']];
 function finSituation(j) {
@@ -2158,9 +2183,10 @@ function comissoesView(c) {
   const u = curUser(), acc = finAccess(u); if (!acc) return denied();
   if (acc !== 'admin') {
     if (c === 'parametros') return denied();
-    const rt = c === 'oportunidades' ? 'oportunidades' : '';
-    const nav = `<nav class="fin-rtabs mb" aria-label="Minhas comissões">${[['', 'Meu extrato'], ['oportunidades', 'Minhas oportunidades']].map(x => `<a class="btn sm ${rt === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}"${rt === x[0] ? ' aria-current="page"' : ''}>${x[1]}</a>`).join('')}</nav>`;
-    return shell(pageHead('Minhas comissões', rt ? 'Registre as empresas que você está prospectando.' : 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + nav + (rt ? oppsView(u, false) : extratoPage(u, false)));
+    const rt = ['extrato', 'oportunidades'].includes(c) ? c : '';
+    const nav = `<nav class="fin-rtabs mb" aria-label="Minhas comissões">${[['', 'Meu painel'], ['extrato', 'Meu extrato'], ['oportunidades', 'Minhas oportunidades']].map(x => `<a class="btn sm ${rt === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}"${rt === x[0] ? ' aria-current="page"' : ''}>${x[1]}</a>`).join('')}</nav>`;
+    const sub = { '': 'Sua meta, as vagas em andamento e as comissões do mês.', extrato: 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.', oportunidades: 'Registre as empresas que você está prospectando.' }[rt];
+    return shell(pageHead('Minhas comissões', sub) + finEnv() + nav + (rt === 'oportunidades' ? oppsView(u, false) : rt === 'extrato' ? extratoPage(u, false) : painelHtml(u)));
   }
   const tab = COM_TABS.some(x => x[0] === (c || '')) ? (c || '') : '';
   if (tab !== 'parametros') ui.paramEdit = false;

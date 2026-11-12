@@ -849,3 +849,9 @@ body.lp .auth-in{animation:lpup 1.4s 1.1s cubic-bezier(.22,.61,.36,1) both}
 
 .fin-rtabs{display:flex;flex-wrap:wrap;gap:8px}
 .fin-warn{margin-top:12px;padding:10px 14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--red) 50%,var(--line));background:color-mix(in srgb,var(--red) 10%,var(--card));color:var(--ink);font-size:14px}
+
+.fin-bar{position:relative;height:12px;border-radius:99px;background:color-mix(in srgb,var(--ink) 10%,var(--card));overflow:visible;margin-top:10px}
+.fin-bar span{display:block;height:100%;border-radius:99px;background:var(--green);transition:width .4s}
+.fin-bar i{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);opacity:.5}
+.fin-list{list-style:none;margin:0;padding:0}.fin-list li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}.fin-list li:last-child{border:0}.fin-list b{white-space:nowrap;font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.fin-bar span{transition:none}}

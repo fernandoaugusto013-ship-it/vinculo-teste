@@ -12,7 +12,7 @@ def pay_date(m):
     return f'15/{mo:02d}/{y}'
 
 def test_recruiter_sees_own_statement(app):
-    app.login('u_rec1'); m = setup(app); app.go('#/s/comissoes')
+    app.login('u_rec1'); m = setup(app); app.go('#/s/comissoes/extrato')
     t = app.main()
     for s in ['Ajuda de custo', 'R$ 500,00', 'DAS-MEI', 'R$ 86,05', 'Valor base', 'R$ 92,40', 'Ambiente de teste', 'Total a pagar em ' + pay_date(m), 'R$ 678,45']:
         assert s in t, s
@@ -46,11 +46,11 @@ def test_client_and_candidate_denied(app):
         assert app.ev("([u]) => __V.fin.payStatement(__V.db.users.find(x => x.id === u), '2026-11', 'u_rec1')", [uid]) is None
 
 def test_job_without_fin_absent_and_empty_month(app):
-    app.login('u_rec1'); app.go('#/s/comissoes'); t = app.main()
+    app.login('u_rec1'); app.go('#/s/comissoes/extrato'); t = app.main()
     assert 'R$ 586,05' in t and 'Nenhuma comissão neste mês' in t
 
 def test_closed_month_uses_frozen(app):
     app.login('u_rec1'); m = setup(app)
     app.ev("(m) => __V.db.payClosings.push({ month: m, closedAt: m + '-28', closedBy: 'u_admin', statements: [{ userId: 'u_rec1', extrato: { month: m, pagamentoEm: '2099-01-15', ajudaCusto: 500, das: 86.05, valorBase: 0, meta: { meta: 4200, realizado: 0, pct: 0 }, linhas: [], previstas: [], total: 111.11 } }] })", m)
     assert app.ev("(m) => __V.fin.payStatement(__V.db.users.find(x => x.id === 'u_rec1'), m).total", m) == 111.11
-    app.go('#/s/comissoes'); assert 'R$ 111,11' in app.main() and 'Mês fechado' in app.main()
+    app.go('#/s/comissoes/extrato'); assert 'R$ 111,11' in app.main() and 'Mês fechado' in app.main()
