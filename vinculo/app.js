@@ -1164,7 +1164,7 @@ function boardHtml(job) {
 }
 function pipeline(id) {
   const j = by('jobs', id); if (!j) return notFound(); const apps = jobApps(j.id), u = curUser();
-  return shell(`<p class="sm mb"><a href="#/s/vagas">← Vagas</a></p>${pageHead('Kanban — ' + esc(j.title), `${esc(compName(j.companyId))} — ${esc(j.city)}/${j.state} — ${j.mode} — ${jobStBadge(j.status)}`, `${j.status === 'open' ? `<button class="btn sm pri" data-act="shareJob" data-id="${j.id}">${ico('link', 14)} Divulgar vaga</button>` : ''}<a class="btn sm" href="${jobUrl(j.id)}" target="_blank" rel="noopener">Ver página pública</a><a class="btn sm" href="#/s/relatorios/ver?jobs=${j.id}">${ico('file', 14)} Relatório da vaga</a><a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar vaga</a><a class="btn sm" href="#/s/banco" data-act="tbForJob" data-id="${j.id}">${ico('users', 14)} Buscar no banco</a>${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>`}${j.status !== 'closed' ? `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>` : ''}`)}
+  return shell(`<p class="sm mb"><a href="#/s/vagas">← Vagas</a></p>${pageHead('Kanban — ' + esc(j.title), `${esc(compName(j.companyId))} — ${esc(j.city)}/${j.state} — ${j.mode} — ${jobStBadge(j.status)}`, `${j.status === 'open' ? `<button class="btn sm pri" data-act="shareJob" data-id="${j.id}">${ico('link', 14)} Divulgar vaga</button>` : ''}<a class="btn sm" href="${jobUrl(j.id)}" target="_blank" rel="noopener">Ver página pública</a><a class="btn sm" href="#/s/relatorios/ver?jobs=${j.id}">${ico('file', 14)} Relatório da vaga</a>${u.role === 'admin' ? `<a class="btn sm" href="#/s/vaga/${j.id}/financeiro">${ico('trend', 14)} Financeiro</a>` : ''}<a class="btn sm" href="#/s/vaga/${j.id}/editar">Editar vaga</a><a class="btn sm" href="#/s/banco" data-act="tbForJob" data-id="${j.id}">${ico('users', 14)} Buscar no banco</a>${j.status === 'open' ? `<button class="btn sm" data-act="jobStatus" data-id="${j.id}" data-v="paused">Pausar</button>` : `<button class="btn sm pri" data-act="jobStatus" data-id="${j.id}" data-v="open">Publicar</button>`}${j.status !== 'closed' ? `<button class="btn sm danger" data-act="jobStatus" data-id="${j.id}" data-v="closed">Encerrar</button>` : ''}`)}
   <div class="flex gap wrap mb"><div class="grow" style="max-width:340px"><input type="search" placeholder="Filtrar candidatos nesta vaga" data-live="boardq" value="${esc(ui.boardq)}" aria-label="Filtrar candidatos"></div><span class="mut sm">${apps.length} candidaturas. Arraste os cartões entre as etapas ou use os botões. O percentual é apenas apoio, nunca uma decisão.</span></div>
   <div id="board">${boardHtml(j)}</div>`);
 }
@@ -1534,7 +1534,7 @@ function route() {
             if (query.req) { const r = by('requests', query.req); if (r) pre = { co: r.companyId, req: r.id, title: r.title, area: r.area, city: r.city, mode: r.mode, qty: r.qty, notes: r.notes }; }
             return jobForm(null, pre);
           }
-          return parts[3] === 'editar' ? jobForm(c) : pipeline(c);
+          return parts[3] === 'editar' ? jobForm(c) : parts[3] === 'financeiro' ? jobFinView(c) : pipeline(c);
         case 'kanban': return kanbanHub();
         case 'relatorios': return c === 'ver' ? reportView(query) : reportsHub();
         case 'triagem': return triagem();
@@ -1979,7 +1979,106 @@ function comissoesView(c) {
   return shell(pageHead('Minhas comissões', 'Seu extrato e suas metas financeiras.') + finEnv());
 }
 
+/* ---------- Financeiro da vaga (somente coordenação) ---------- */
+const FIN_TIPOS = [['geral', 'Vaga geral'], ['contabil', 'Vaga contábil']];
+const FIN_STATUS = [['aberta', 'Aberta'], ['fechada', 'Fechada'], ['reposicao', 'Reposição'], ['cancelada', 'Cancelada'], ['congelada', 'Congelada']];
+const FIN_FAT = [['aberta', 'Ainda não emitida'], ['emitida', 'Emitida'], ['recebida', 'Recebida']];
+const FIN_ORIG = [['vaga_extra', 'Vaga extra'], ['cliente_novo', 'Cliente novo'], ['outro', 'Outro']];
+const finJob = j => ({ id: j.id, cliente: compName(j.companyId), cargo: j.title, fin: j.fin });
+const monthClosed = m => !!m && db.payClosings.some(c => c.month === m);
+const nz = v => (v === undefined || v === null || String(v).trim() === '') ? null : String(v).trim();
+function activeRecruiter(id) { const r = by('users', id); return !!r && r.role === 'recruiter' && r.active !== false; }
+function normFin(d) {
+  const f = d.fatura || {}, ps = (d.parts || []).filter(x => x && nz(x.userId)).map(x => ({ userId: x.userId, pct: paramNum(x.pct) }));
+  return {
+    tipo: d.tipo, valor: paramNum(d.valor), gupy: !!d.gupy, alinhamento: nz(d.alinhamento), aprovacao: nz(d.aprovacao),
+    diasSuspensos: nz(d.diasSuspensos) === null ? 0 : Number(d.diasSuspensos), admissao: nz(d.admissao), status: d.status,
+    garantia: nz(d.garantia) === null ? null : Number(d.garantia),
+    fatura: { emissao: nz(f.emissao), status: f.status || 'aberta', recebimento: nz(f.recebimento) }, parts: ps,
+    originadaPor: nz(d.originadaPor), origTipo: nz(d.origTipo), contratoInicio: nz(d.contratoInicio)
+  };
+}
+function validateJobFin(n) {
+  const e = [], D = Comissoes.isDate;
+  if (!FIN_TIPOS.some(t => t[0] === n.tipo)) e.push('Tipo de vaga inválido.');
+  if (!(n.valor > 0)) e.push('Informe o valor da vaga maior que zero.');
+  if (!FIN_STATUS.some(t => t[0] === n.status)) e.push('Status financeiro inválido.');
+  if (n.garantia !== null && [30, 60, 90].indexOf(n.garantia) < 0) e.push('Garantia deve ser 30, 60 ou 90 dias.');
+  if (!Number.isInteger(n.diasSuspensos) || n.diasSuspensos < 0) e.push('Dias suspensos deve ser um número inteiro, zero ou maior.');
+  [['alinhamento', 'alinhamento'], ['aprovacao', 'aprovação'], ['admissao', 'admissão'], ['contratoInicio', 'início do contrato']].forEach(([k, l]) => { if (n[k] !== null && !D(n[k])) e.push(`Data inválida em ${l}.`); });
+  if (n.fatura.emissao !== null && !D(n.fatura.emissao)) e.push('Data inválida na emissão da fatura.');
+  if (n.fatura.recebimento !== null && !D(n.fatura.recebimento)) e.push('Data inválida no recebimento da fatura.');
+  if (D(n.alinhamento) && D(n.aprovacao) && n.aprovacao < n.alinhamento) e.push('A aprovação não pode ser anterior ao alinhamento.');
+  if (!FIN_FAT.some(t => t[0] === n.fatura.status)) e.push('Situação da fatura inválida.');
+  if (n.fatura.status === 'recebida' && n.fatura.recebimento === null) e.push('Informe a data de recebimento da fatura recebida.');
+  if (D(n.fatura.emissao) && D(n.fatura.recebimento) && n.fatura.recebimento < n.fatura.emissao) e.push('O recebimento não pode ser anterior à emissão.');
+  const ids = n.parts.map(x => x.userId);
+  if (!n.parts.length) e.push('Escolha ao menos um recrutador responsável.');
+  if (ids.some(i => !activeRecruiter(i))) e.push('Cada participante precisa ser um recrutador ativo.');
+  if (new Set(ids).size !== ids.length) e.push('Recrutador repetido nas participações.');
+  if (n.parts.some(x => !(x.pct >= 0))) e.push('Percentual de participação inválido.');
+  else if (n.parts.length && Math.abs(n.parts.reduce((a, x) => a + x.pct, 0) - 100) > 0.001) e.push('A soma das participações deve ser 100%.');
+  if (n.originadaPor !== null) {
+    if (!activeRecruiter(n.originadaPor)) e.push('Quem originou precisa ser um recrutador ativo.');
+    if (!FIN_ORIG.some(t => t[0] === n.origTipo)) e.push('Informe o tipo de originação.');
+    else if (n.origTipo === 'cliente_novo' && !D(n.contratoInicio)) e.push('Cliente novo exige a data de início do contrato.');
+  }
+  return e;
+}
+function saveJobFin(u, jobId, data, force) {
+  if (finAccess(u) !== 'admin') return { ok: false, error: 'Sem permissão', errors: ['Sem permissão para esta ação.'] };
+  const j = by('jobs', jobId); if (!j) return { ok: false, error: 'Vaga não encontrada', errors: ['Vaga não encontrada.'] };
+  const n = normFin(data || {}), errs = validateJobFin(n); if (errs.length) return { ok: false, errors: errs };
+  if (!force) {
+    const p = payParams(), months = [j.fin && Comissoes.competencia(j.fin, p), Comissoes.competencia(n, p)];
+    if (months.some(monthClosed)) return { ok: false, error: 'Mês fechado', errors: ['Mês fechado: a comissão desta vaga pertence a um mês já fechado. Use um ajuste na coordenação.'] };
+  }
+  const same = j.fin && JSON.stringify(j.fin) === JSON.stringify(n);
+  j.fin = n; if (!same) { audit('Financeiro da vaga atualizado', j.title); save(); }
+  return { ok: true };
+}
+function jobFinSummary(j) {
+  if (!j || !j.fin) return null; const p = payParams(), f = j.fin, prazo = Comissoes.prazo(f); if (prazo === null) return { prazo: null };
+  const liq = Comissoes.liquido(f.valor, f.gupy, p), fx = Comissoes.faixa(f.tipo, prazo, p);
+  return { prazo, liquido: liq, pct: fx.pct, comissao: Comissoes.round2(liq * fx.pct), competencia: Comissoes.competencia(f, p), diasParaMudar: Comissoes.diasParaMudar(f.tipo, prazo, p) };
+}
+function readJobFin(f) {
+  const fd = new FormData(f), g = k => fd.get(k), parts = [];
+  [1, 2].forEach(i => { if (nz(g('p' + i + '_user'))) parts.push({ userId: g('p' + i + '_user'), pct: g('p' + i + '_pct') }); });
+  return { tipo: g('tipo'), valor: g('valor'), gupy: fd.has('gupy'), alinhamento: g('alinhamento'), aprovacao: g('aprovacao'), diasSuspensos: g('diasSuspensos'), admissao: g('admissao'), status: g('status'), garantia: g('garantia'), fatura: { emissao: g('fat_emissao'), status: g('fat_status'), recebimento: g('fat_receb') }, parts, originadaPor: g('originadaPor'), origTipo: g('origTipo'), contratoInicio: g('contratoInicio') };
+}
+function finPreviewHtml(d) {
+  const n = normFin(d), p = payParams(), pr = Comissoes.prazo({ alinhamento: n.alinhamento, aprovacao: n.aprovacao, diasSuspensos: n.diasSuspensos });
+  if (!(n.valor > 0)) return '<p class="mut sm">Informe o valor da vaga para ver o cálculo.</p>';
+  const liq = Comissoes.liquido(n.valor, n.gupy, p);
+  if (pr === null) return `<p class="sm">Valor líquido: <b>${money(liq)}</b>. Informe alinhamento e aprovação (nessa ordem) para calcular o prazo e a faixa.</p>`;
+  const fx = Comissoes.faixa(n.tipo, pr, p), tot = Comissoes.round2(liq * fx.pct);
+  return `<ul class="stack sm"><li>Valor líquido: <b>${money(liq)}</b></li><li>Prazo de fechamento: <b>${pr} dias</b></li><li>Faixa: <b>${Math.round(fx.pct * 100)}%</b></li><li>Comissão total da vaga: <b>${money(tot)}</b></li>${n.parts.map(x => `<li>${esc((by('users', x.userId) || {}).name || x.userId)} (${x.pct}%): <b>${money(Comissoes.round2(tot * x.pct / 100))}</b></li>`).join('')}</ul>`;
+}
+function jobFinView(id) {
+  const u = curUser(); if (finAccess(u) !== 'admin') return denied();
+  const j = by('jobs', id); if (!j) return notFound();
+  const f = j.fin || { tipo: 'geral', valor: '', gupy: false, alinhamento: j.createdAt ? String(j.createdAt).slice(0, 10) : '', aprovacao: '', diasSuspensos: 0, admissao: '', status: 'aberta', garantia: null, fatura: { emissao: '', status: 'aberta', recebimento: '' }, parts: [{ userId: j.recruiterId || '', pct: 100 }], originadaPor: '', origTipo: '', contratoInicio: '' };
+  const recs = db.users.filter(x => x.role === 'recruiter' && x.active !== false).map(x => [x.id, x.name]);
+  const p1 = f.parts[0] || {}, p2 = f.parts[1] || {}, fa = f.fatura || {};
+  const d = (k, v) => fld(k, inp(v[0], v[1], { type: 'date' }));
+  return shell(`<p class="sm mb"><a href="#/s/vaga/${j.id}">← ${esc(j.title)}</a></p>${pageHead('Financeiro — ' + esc(j.title), esc(compName(j.companyId)))}${finEnv()}
+  <form data-form="jobFin" data-id="${j.id}" class="stack">
+  <section class="card mb"><h3>Vaga</h3><div class="fg">${fld('Tipo de vaga', sel('tipo', FIN_TIPOS, f.tipo))}${fld('Valor da vaga (R$)', inp('valor', f.valor, { type: 'number', req: true, attrs: 'step="any" min="0"' }))}${fld('Status financeiro', sel('status', FIN_STATUS, f.status))}${fld('Garantia', sel('garantia', [['30', '30 dias'], ['60', '60 dias'], ['90', '90 dias']], f.garantia, 'Sem garantia'))}
+  <label class="field"><span>Usa Gupy</span><input type="checkbox" name="gupy" ${f.gupy ? 'checked' : ''}></label></div></section>
+  <section class="card mb"><h3>Datas</h3><div class="fg">${d('Alinhamento', ['alinhamento', f.alinhamento])}${d('Aprovação', ['aprovacao', f.aprovacao])}${fld('Dias suspensos', inp('diasSuspensos', f.diasSuspensos, { type: 'number', attrs: 'min="0" step="1"' }))}${d('Admissão', ['admissao', f.admissao])}</div></section>
+  <section class="card mb"><h3>Fatura</h3><div class="fg">${d('Emissão', ['fat_emissao', fa.emissao])}${fld('Situação', sel('fat_status', FIN_FAT, fa.status))}${d('Recebimento', ['fat_receb', fa.recebimento])}</div></section>
+  <section class="card mb"><h3>Quem recebe a comissão</h3><div class="fg">${fld('Responsável', sel('p1_user', recs, p1.userId, 'Escolha'))}${fld('Participação (%)', inp('p1_pct', p1.pct == null ? 100 : p1.pct, { type: 'number', attrs: 'step="any" min="0" max="100"' }))}${fld('Segundo recrutador', sel('p2_user', recs, p2.userId, 'Ninguém'))}${fld('Participação (%)', inp('p2_pct', p2.pct == null ? 0 : p2.pct, { type: 'number', attrs: 'step="any" min="0" max="100"' }))}</div>
+  <p class="mt-s"><button type="button" class="btn sm" data-act="finSplit">Dividir 50/50</button></p></section>
+  <section class="card mb"><h3>Originação (opcional)</h3><div class="fg">${fld('Originada por', sel('originadaPor', recs, f.originadaPor, 'Ninguém'))}${fld('Tipo', sel('origTipo', FIN_ORIG, f.origTipo, 'Escolha'))}${d('Início do contrato', ['contratoInicio', f.contratoInicio])}</div></section>
+  <section class="card mb"><h3>Cálculo</h3><div id="fin-prev">${finPreviewHtml(readJobFinFrom(f))}</div><p class="mt-s"><button type="button" class="btn sm" data-act="finPreview">Calcular</button></p></section>
+  <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Salvar financeiro</button></div></form>`);
+}
+const readJobFinFrom = f => ({ tipo: f.tipo, valor: f.valor, gupy: f.gupy, alinhamento: f.alinhamento, aprovacao: f.aprovacao, diasSuspensos: f.diasSuspensos, admissao: f.admissao, status: f.status, garantia: f.garantia, fatura: f.fatura, parts: f.parts, originadaPor: f.originadaPor, origTipo: f.origTipo, contratoInicio: f.contratoInicio });
+
 const actions = {
+  finPreview() { const f = $('form[data-form="jobFin"]'), box = $('#fin-prev'); if (f && box) box.innerHTML = finPreviewHtml(readJobFin(f)); },
+  finSplit() { const f = $('form[data-form="jobFin"]'); if (!f) return; f.elements.p1_pct.value = 50; f.elements.p2_pct.value = 50; },
   metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
   goalNew() { goalSelfModal(null); },
   metaRec(t) { ui.metaRec = t.value; render(true); },
@@ -2178,6 +2277,10 @@ const actions = {
 
 /* ---------- Formulários (data-form) ---------- */
 const forms = {
+  jobFin(f) {
+    const u = curUser(), r = saveJobFin(u, f.dataset.id, readJobFin(f)); if (!r.ok) return toast(r.errors[0], true);
+    toast('Financeiro da vaga salvo.'); render(true);
+  },
   payParams(f) {
     const u = curUser(), fd = new FormData(f), patch = {}, p = payParams();
     Object.keys(PARAM_LABEL).forEach(k => { const v = paramNum(fd.get(k)); patch[k] = PARAM_PCT.includes(k) ? v / 100 : v; });
@@ -2485,5 +2588,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();
