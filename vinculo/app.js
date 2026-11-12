@@ -1496,6 +1496,7 @@ function go(path) {
 }
 function route() {
   const { parts, query } = parse(), u = curUser(), [a, b, c] = parts;
+  if (u && isStaff(u) && db.payAlerts) checkFaixaAlerts(todayISO());
   if (a !== 'cadastro') { ui.google = null; ui.afterReg = null; } else if (query.next) ui.afterReg = query.next;
   const needLogin = () => { go('/entrar?next=' + encodeURIComponent('/' + parts.join('/'))); return ''; };
   if (!a) return landing();
@@ -2188,6 +2189,22 @@ function coordView(u) {
   return head + recCard + fatCard + aguCard + adjCard;
 }
 const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['oportunidades', 'Oportunidades'], ['extratos', 'Extratos'], ['coordenacao', 'Coordenação'], ['parametros', 'Parâmetros']];
+/* ---------- Alertas de faixa ---------- */
+function checkFaixaAlerts(hoje) {
+  if (!db.payAlerts || !Comissoes.isDate(hoje)) return 0;
+  const p = payParams(), C = Comissoes; let n = 0;
+  db.jobs.forEach(j => { const f = j.fin;
+    if (!f || f.status !== 'aberta' || f.aprovacao || !C.isDate(f.alinhamento) || !(+f.valor > 0)) return;
+    const prazo = C.diffDays(f.alinhamento, hoje) - (+f.diasSuspensos || 0); if (!(prazo >= 0)) return;
+    const fx = C.faixa(f.tipo, prazo, p), dm = C.diasParaMudar(f.tipo, prazo, p); if (dm === null || dm < 1 || dm > p.alertaDias) return;
+    if (db.payAlerts.some(a => a.jobId === j.id && a.faixaIdx === fx.idx)) return;
+    const t = p.tabelas[f.tipo] || p.tabelas.geral, nx = t[fx.idx + 1]; if (!nx) return;
+    const txt = `${dm === 1 ? 'Falta 1 dia' : 'Faltam ' + dm + ' dias'} para a vaga "${j.title}" (${compName(j.companyId)}) mudar de faixa de comissão: de ${Math.round(fx.pct * 100)}% para ${Math.round(nx.pct * 100)}%.`;
+    (f.parts || []).filter(x => activeRecruiter(x.userId)).forEach(x => notify(x.userId, txt, '/s/comissoes'));
+    db.payAlerts.push({ jobId: j.id, faixaIdx: fx.idx, at: nowISO() }); n++;
+  });
+  if (n) save(); return n;
+}
 /* ---------- Painel do recrutador ---------- */
 const todayISO = () => { const t = new Date(), z = n => String(n).padStart(2, '0'); return t.getFullYear() + '-' + z(t.getMonth() + 1) + '-' + z(t.getDate()); };
 function painelHtml(target) {
@@ -2893,5 +2910,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin, empresaKey, saveOpp, updateOpp, oppsFor, addAdjust, closeMonth: closePayMonth }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin, empresaKey, saveOpp, updateOpp, oppsFor, addAdjust, closeMonth: closePayMonth, checkFaixaAlerts }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();
