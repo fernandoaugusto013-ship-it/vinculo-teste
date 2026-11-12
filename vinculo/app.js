@@ -1941,6 +1941,8 @@ function ensurePayDb() {
   if (!db.payParams || typeof db.payParams !== 'object') db.payParams = { current: Comissoes.defaultParams(), history: [] };
   if (!db.payParams.current) db.payParams.current = Comissoes.defaultParams(); if (!Array.isArray(db.payParams.history)) db.payParams.history = [];
   ['opps', 'payAdjust', 'payClosings', 'payAlerts'].forEach(k => { if (!Array.isArray(db[k])) db[k] = []; });
+  if (!db.payDemo || typeof db.payDemo !== 'object') db.payDemo = { users: [], jobs: [] };
+  ['users', 'jobs'].forEach(k => { if (!Array.isArray(db.payDemo[k])) db.payDemo[k] = []; });
 }
 const payParams = () => db.payParams.current;
 const finAccess = u => !u ? null : u.role === 'admin' ? 'admin' : u.role === 'recruiter' ? 'recruiter' : null;
@@ -1979,13 +1981,15 @@ function paramsView(top) {
 }
 /* ---------- Extratos ---------- */
 const payMonths = () => { const cur = monthKey(new Date()); return [0, 1, 2, 3, 4, 5, 6].map(i => Comissoes.nextMonth(cur, -i)); };
-const payRecruiters = () => db.users.filter(x => x.role === 'recruiter');
+const payRecruiters = () => db.users.filter(x => x.role === 'recruiter').concat(db.payDemo.users);
+const payUser = id => by('users', id) || db.payDemo.users.find(x => x.id === id) || null;
+const payJobs = () => db.jobs.filter(j => j.fin).map(finJob).concat(db.payDemo.jobs);
 function payStatement(u, month, userId) {
   const acc = finAccess(u); if (!acc) return null;
-  const target = acc === 'recruiter' ? u : by('users', userId); if (!target || target.role !== 'recruiter') return null;
+  const target = acc === 'recruiter' ? u : payUser(userId); if (!target || target.role !== 'recruiter') return null;
   const cl = db.payClosings.find(c => c.month === month), fz = cl && (cl.statements || []).find(x => x.userId === target.id);
   if (fz) return Object.assign({}, fz.extrato, { userId: target.id, fechado: true });
-  const ex = Comissoes.extrato(month, target, db.jobs.filter(j => j.fin).map(finJob), db.payAdjust, payParams());
+  const ex = Comissoes.extrato(month, target, payJobs(), db.payAdjust, payParams());
   return Object.assign(ex, { userId: target.id, fechado: false });
 }
 const brDate = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4) : '—';
@@ -2004,17 +2008,56 @@ function extratoCard(ex, target) {
 function extratoPage(u, admin) {
   const months = payMonths(); if (!months.includes(ui.payMonth)) ui.payMonth = months[0];
   const recs = payRecruiters(); if (admin && !recs.some(r => r.id === ui.payUser)) ui.payUser = recs[0] ? recs[0].id : '';
-  const target = admin ? by('users', ui.payUser) : u, ex = target && payStatement(u, ui.payMonth, target.id);
+  const target = admin ? payUser(ui.payUser) : u, ex = target && payStatement(u, ui.payMonth, target.id);
   const pick = `<div class="flex gap wrap mb" style="align-items:flex-end">${admin ? fld('Recrutador(a)', sel('payUser', recs.map(r => [r.id, r.name + (r.active === false ? ' (inativo)' : '')]), ui.payUser, null, 'data-act="paySel" data-k="payUser"')) : ''}${fld('Mês', sel('payMonth', months.map(m => [m, ymTxt(m)]), ui.payMonth, null, 'data-act="paySel" data-k="payMonth"'))}</div>`;
   return pick + (ex ? extratoCard(ex, target) : '<div class="empty"><b>Nenhum recrutador cadastrado.</b></div>');
 }
+/* Casos da política (ambiente de teste): ficam só em db.payDemo — fora de Vagas, Metas, login e notificações */
+const POL_CASES = [
+  ['pol_c1', 'Caso 1 — meta atingida', [[3, { valor: 1320, prazo: 15 }], [2, { valor: 1800, gupy: true, prazo: 8 }]]],
+  ['pol_c2', 'Caso 2 — crescimento', [[4, { valor: 1320, prazo: 8 }], [2, { valor: 1800, gupy: true, prazo: 15 }], [2, { valor: 2500, gupy: true, prazo: 25, tipo: 'contabil' }],
+    [2, { valor: 1320, prazo: 10, user: 'pol_outra', orig: 'cliente_novo', cliente: 'Cliente novo (exemplo)' }], [1, { valor: 1100, palestra: true, orig: 'outro', cliente: 'Palestra (exemplo)' }]]],
+  ['pol_c3', 'Caso 3 — abaixo da meta', [[3, { valor: 1320, prazo: 15 }]]]
+];
+function loadPolicyCases(u, month) {
+  if (finAccess(u) !== 'admin') return { ok: false, error: 'Sem permissão' };
+  if (!/^\d{4}-\d{2}$/.test(month || '')) return { ok: false, error: 'Mês inválido' };
+  removePolicyCases(u, true);
+  const prev = Comissoes.nextMonth(month, -1), d = n => month + '-' + String(n).padStart(2, '0');
+  POL_CASES.forEach(([id, name, spec]) => {
+    db.payDemo.users.push({ id, role: 'recruiter', name, demo: 'politica', doc: '00.000.000/0001-0' + id.slice(-1), startDate: Comissoes.nextMonth(month, -12) + '-10', active: true });
+    let n = 0;
+    spec.forEach(([q, o]) => { for (let i = 0; i < q; i++) { n++;
+      const fat = { emissao: d(5), status: 'recebida', recebimento: d(12) };
+      const fin = o.palestra
+        ? { tipo: 'geral', valor: o.valor, gupy: false, alinhamento: null, aprovacao: null, diasSuspensos: 0, admissao: null, status: 'fechada', garantia: null, fatura: fat, parts: [], originadaPor: id, origTipo: 'outro', contratoInicio: d(1) }
+        : { tipo: o.tipo || 'geral', valor: o.valor, gupy: !!o.gupy, alinhamento: prev + '-01', aprovacao: Comissoes.addDays(prev + '-01', o.prazo), diasSuspensos: 0, admissao: d(10), status: 'fechada', garantia: 30, fatura: fat,
+            parts: [{ userId: o.user || id, pct: 100 }], originadaPor: o.orig ? id : null, origTipo: o.orig || null, contratoInicio: o.orig === 'cliente_novo' ? d(1) : null };
+      db.payDemo.jobs.push({ id: id + '_v' + n, demo: 'politica', cliente: o.cliente || 'Cliente exemplo', cargo: (o.palestra ? 'Palestra' : (o.tipo === 'contabil' ? 'Vaga contábil' : 'Vaga')) + ' ' + n + (o.gupy ? ' (Gupy)' : '') + (o.palestra ? '' : ' — ' + o.prazo + ' dias'), fin });
+    } });
+  });
+  audit('Casos da política carregados', ymTxt(month)); save();
+  return { ok: true, users: POL_CASES.map(c => c[0]) };
+}
+function removePolicyCases(u, quiet) {
+  if (finAccess(u) !== 'admin') return { ok: false, error: 'Sem permissão' };
+  const had = db.payDemo.users.length + db.payDemo.jobs.length;
+  db.payDemo.users = db.payDemo.users.filter(x => x.demo !== 'politica'); db.payDemo.jobs = db.payDemo.jobs.filter(x => x.demo !== 'politica');
+  if (ui.payUser && !payUser(ui.payUser)) ui.payUser = '';
+  if (!quiet && had) { audit('Casos da política removidos', ''); save(); }
+  return { ok: true };
+}
+const polCard = () => { const on = db.payDemo.users.length > 0;
+  return `<section class="card mb"><h3>Casos da política (teste)</h3><p class="sm mut">Cria 3 recrutadoras fictícias com as vagas dos exemplos do documento, no mês atual, para conferir os totais nos Extratos. Elas não aparecem em Vagas, Metas nem Usuários e não recebem avisos.</p>
+  ${on ? `<p class="sm mt-s">Carregados: ${db.payDemo.users.map(x => `<b>${esc(x.name)}</b>`).join(', ')}.</p>` : ''}
+  <div class="flex gap wrap mt-s"><button class="btn sm pri" data-act="polLoad">${on ? 'Recarregar casos' : 'Carregar casos da política'}</button>${on ? `<a class="btn sm" href="#/s/comissoes/extratos">Ver extratos</a><button class="btn sm" data-act="polRemove">Remover casos</button>` : ''}</div></section>`; };
 const comTabs = c => `<div class="opts mb">${[['', 'Parâmetros'], ['extratos', 'Extratos']].map(x => `<a class="btn sm ${(c || '') === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}">${x[1]}</a>`).join(' ')}</div>`;
 function comissoesView(c) {
   const u = curUser(), acc = finAccess(u); if (!acc) return denied();
   if (c === 'parametros' && acc !== 'admin') return denied();
   if (acc === 'admin') {
     if (c === 'extratos') return shell(pageHead('Extratos', 'Escolha a recrutadora e o mês para ver o extrato.') + finEnv() + comTabs('extratos') + extratoPage(u, true));
-    return paramsView(comTabs('') + finPendingHtml());
+    return paramsView(comTabs('') + polCard() + finPendingHtml());
   }
   return shell(pageHead('Minhas comissões', 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + extratoPage(u, false));
 }
@@ -2117,6 +2160,8 @@ function jobFinView(id) {
 const readJobFinFrom = f => ({ tipo: f.tipo, valor: f.valor, gupy: f.gupy, alinhamento: f.alinhamento, aprovacao: f.aprovacao, diasSuspensos: f.diasSuspensos, admissao: f.admissao, status: f.status, garantia: f.garantia, fatura: f.fatura, parts: f.parts, originadaPor: f.originadaPor, origTipo: f.origTipo, contratoInicio: f.contratoInicio });
 
 const actions = {
+  polLoad() { const u = curUser(), r = loadPolicyCases(u, monthKey(new Date())); if (!r.ok) return toast(r.error, true); ui.payUser = r.users[0]; ui.payMonth = monthKey(new Date()); toast('Casos da política carregados. Veja na aba Extratos.'); render(true); },
+  polRemove() { const r = removePolicyCases(curUser()); if (!r.ok) return toast(r.error, true); toast('Casos da política removidos.'); render(true); },
   paySel(t) { ui[t.dataset.k] = t.value; render(true); },
   finPreview() { const f = $('form[data-form="jobFin"]'), box = $('#fin-prev'); if (f && box) box.innerHTML = finPreviewHtml(readJobFin(f)); },
   finSplit() { const f = $('form[data-form="jobFin"]'); if (!f) return; f.elements.p1_pct.value = 50; f.elements.p2_pct.value = 50; },
@@ -2629,5 +2674,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();
