@@ -50,6 +50,59 @@
     });
     return { ok: e.length === 0, errors: e };
   };
+
+  /* ---- vagas, comissão, originação, meta e extrato ---- */
+  const EXCL = ['reposicao', 'cancelada', 'congelada'];
+  const finOk = f => !!f && num(+f.valor) && +f.valor > 0 && EXCL.indexOf(f.status) < 0;
+  const refDate = f => (f && (f.admissao || f.contratoInicio)) || null;
+  const partOf = (fin, userId) => { const ps = fin.parts || []; const x = ps.find(q => q.userId === userId); return x ? +x.pct : null; };
+  const partsOk = fin => { const ps = fin.parts; if (!Array.isArray(ps) || !ps.length) return false; return Math.abs(ps.reduce((a, q) => a + (+q.pct || 0), 0) - 100) < 0.001; };
+  C.competencia = (fin, p) => {
+    if (!fin || !fin.fatura || fin.fatura.status !== 'recebida' || !C.isDate(fin.fatura.recebimento)) return null;
+    const ref = refDate(fin); if (!C.isDate(ref)) return null;
+    const lib = C.addDays(ref, p.carenciaDias), rec = fin.fatura.recebimento;
+    return C.monthOf(rec > lib ? rec : lib);
+  };
+  C.comissaoVaga = (job, userId, p) => {
+    const f = job && job.fin, no = motivo => ({ ok: false, motivo, liquido: 0, prazo: null, pct: 0, valor: 0 });
+    if (!f) return no('sem financeiro'); if (EXCL.indexOf(f.status) >= 0) return no('status');
+    if (!num(+f.valor) || +f.valor <= 0) return no('dados incompletos');
+    if (!partsOk(f)) return no('participação');
+    const part = partOf(f, userId); if (part === null) return no('não participa');
+    const pr = C.prazo(f); if (pr === null) return no('dados incompletos');
+    const liq = C.liquido(+f.valor, f.gupy, p), fx = C.faixa(f.tipo, pr, p);
+    return { ok: true, liquido: liq, prazo: pr, pct: fx.pct, valor: C.round2(liq * fx.pct * part / 100) };
+  };
+  const carteiraOk = (f, p) => f.origTipo !== 'cliente_novo' || (C.isDate(f.contratoInicio) && C.isDate(f.fatura && f.fatura.recebimento) && f.fatura.recebimento <= C.addMonths(f.contratoInicio, p.carteiraMeses));
+  C.originacao = (jobs, userId, p) => jobs.filter(j => j.fin && finOk(j.fin) && j.fin.originadaPor === userId && j.fin.origTipo && carteiraOk(j.fin, p)).map(j => {
+    const base = C.liquido(+j.fin.valor, j.fin.gupy, p);
+    return { jobId: j.id, tipo: j.fin.origTipo, base, valor: C.round2(base * p.origPct), competencia: C.competencia(j.fin, p), ref: refDate(j.fin) };
+  });
+  C.valorBase = (pct, p) => !num(pct) || pct < p.faixaMinima ? 0 : pct >= 1 ? p.valorBase : C.round2(p.valorBase * pct);
+  C.metaDoMes = (month, user, jobs, p) => {
+    const ini = C.monthOf(user.startDate || ''), meta = ini && month >= ini && month < C.nextMonth(ini, p.adaptacaoMeses) ? p.metaAdaptacao : p.metaBase;
+    const seen = {}; let real = 0;
+    jobs.forEach(j => { const f = j.fin; if (!f || !finOk(f) || seen[j.id]) return;
+      const ref = refDate(f); if (!C.isDate(ref) || C.monthOf(ref) !== month) return;
+      const part = partsOk(f) ? partOf(f, user.id) : null;
+      if (part !== null) { seen[j.id] = 1; real += C.liquido(+f.valor, f.gupy, p) * part / 100; }
+      else if (f.originadaPor === user.id && f.origTipo && carteiraOk(f, p)) { seen[j.id] = 1; real += C.liquido(+f.valor, f.gupy, p); }
+    });
+    real = C.round2(real); return { meta, realizado: real, pct: meta > 0 ? Math.round(real / meta * 10000) / 10000 : 0 };
+  };
+  C.extrato = (month, user, jobs, ajustes, p) => {
+    const linhas = [], previstas = [], name = j => (j.cliente || '—') + ' — ' + (j.cargo || '—');
+    (jobs || []).forEach(j => { const c = C.comissaoVaga(j, user.id, p); if (!c.ok) return; const comp = C.competencia(j.fin, p);
+      if (comp === month) linhas.push({ jobId: j.id, tipo: 'comissao', descricao: name(j), valor: c.valor });
+      else if (comp === null || comp > month) previstas.push({ jobId: j.id, tipo: 'comissao', valor: c.valor }); });
+    C.originacao(jobs || [], user.id, p).forEach(o => { const j = jobs.find(x => x.id === o.jobId);
+      if (o.competencia === month) linhas.push({ jobId: o.jobId, tipo: 'originacao', descricao: 'Originação (' + o.tipo.replace('_', ' ') + ') — ' + name(j), valor: o.valor });
+      else if (o.competencia === null || o.competencia > month) previstas.push({ jobId: o.jobId, tipo: 'originacao', valor: o.valor }); });
+    (ajustes || []).filter(a => a.userId === user.id && a.month === month).forEach(a => linhas.push({ jobId: null, tipo: 'ajuste', descricao: a.motivo || 'Ajuste', valor: C.round2(+a.valor) }));
+    const meta = C.metaDoMes(month, user, jobs || [], p), vb = C.valorBase(meta.pct, p);
+    const total = C.round2(p.ajudaCusto + p.das + vb + linhas.reduce((a, l) => a + l.valor, 0));
+    return { month, pagamentoEm: C.nextMonth(month) + '-' + String(p.diaPagamento).padStart(2, '0'), ajudaCusto: p.ajudaCusto, das: p.das, valorBase: vb, meta, linhas, previstas, total };
+  };
   root.Comissoes = C;
   if (typeof module !== 'undefined' && module.exports) module.exports = C;
 })(typeof window !== 'undefined' ? window : globalThis);
