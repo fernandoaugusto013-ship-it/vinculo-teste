@@ -87,3 +87,11 @@ test('dados ruins não geram NaN', () => {
   const ex = C.extrato(M, U, [j, { id: 'y', cliente: 'c', cargo: 'k', fin: null }], [], p);
   assert.equal(ex.total, 586.05); assert.equal(C.comissaoVaga(j, 'u1', p).ok, false);
 });
+test('carência atravessando o ano: admissão 28/12 → competência janeiro, pagamento 15/02', () => {
+  const f = { valor: 1320, gupy: false, tipo: 'geral', alinhamento: '2026-12-01', aprovacao: '2026-12-05', diasSuspensos: 0, admissao: '2026-12-28', status: 'fechada',
+    fatura: { emissao: '2026-12-29', status: 'recebida', recebimento: '2026-12-30' }, parts: [{ userId: 'u1', pct: 100 }] };
+  assert.equal(C.competencia(f, p), '2027-01');
+  const ex = C.extrato('2027-01', U, [{ id: 'x', cliente: 'A', cargo: 'B', fin: f }], [], p);
+  assert.equal(ex.linhas.length, 1); assert.equal(ex.pagamentoEm, '2027-02-15');
+  assert.equal(C.extrato('2026-12', U, [{ id: 'x', cliente: 'A', cargo: 'B', fin: f }], [], p).linhas.length, 0);
+});

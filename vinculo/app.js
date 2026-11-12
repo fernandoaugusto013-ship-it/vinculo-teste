@@ -2247,7 +2247,7 @@ const actions = {
   },
   dupJob(t) {
     const j = by('jobs', t.dataset.id), n = JSON.parse(JSON.stringify(j));
-    n.id = uid('j'); n.title = j.title + ' (cópia)'; n.status = 'draft'; n.pubDate = null; n.screening.forEach(q => { q.id = uid('q'); });
+    n.id = uid('j'); n.title = j.title + ' (cópia)'; n.status = 'draft'; n.pubDate = null; delete n.fin; n.screening.forEach(q => { q.id = uid('q'); });
     db.jobs.push(n); save(); toast('Vaga duplicada como rascunho.'); go('/s/vaga/' + n.id + '/editar');
   },
   jobsFilter(t) { ui.jobsAdmin = t.dataset.v; render(true); },
