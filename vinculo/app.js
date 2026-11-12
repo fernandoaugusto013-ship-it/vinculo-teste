@@ -1984,7 +1984,7 @@ function paramsBody() {
 const payMonths = () => { const cur = monthKey(new Date()); return [0, 1, 2, 3, 4, 5, 6].map(i => Comissoes.nextMonth(cur, -i)); };
 const payRecruiters = () => db.users.filter(x => x.role === 'recruiter').concat(db.payDemo.users);
 const payUser = id => by('users', id) || db.payDemo.users.find(x => x.id === id) || null;
-const payJobs = () => db.jobs.filter(j => j.fin).map(finJob).concat(db.payDemo.jobs);
+const payJobs = () => db.jobs.filter(j => j.fin).map(finJob).concat(oppJobs(), db.payDemo.jobs);
 function payStatement(u, month, userId) {
   const acc = finAccess(u); if (!acc) return null;
   const target = acc === 'recruiter' ? u : payUser(userId); if (!target || target.role !== 'recruiter') return null;
@@ -2052,7 +2052,94 @@ const polCard = () => { const on = db.payDemo.users.length > 0;
   return `<section class="card mb"><h3>Casos da política (teste)</h3><p class="sm mut">Cria 3 recrutadoras fictícias com as vagas dos exemplos do documento, no mês atual, para conferir os totais nos Extratos. Elas não aparecem em Vagas, Metas nem Usuários e não recebem avisos.</p>
   ${on ? `<p class="sm mt-s">Carregados: ${db.payDemo.users.map(x => `<b>${esc(x.name)}</b>`).join(', ')}.</p>` : ''}
   <div class="flex gap wrap mt-s"><button class="btn sm pri" data-act="polLoad">${on ? 'Recarregar casos' : 'Carregar casos da política'}</button>${on ? `<a class="btn sm" href="#/s/comissoes/extratos">Ver extratos</a><button class="btn sm" data-act="polRemove">Remover casos</button>` : ''}</div></section>`; };
-const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['extratos', 'Extratos'], ['parametros', 'Parâmetros']];
+/* ---------- Oportunidades ---------- */
+const OPP_TIPOS = [['vaga_extra', 'Vaga extra (cliente atual)'], ['cliente_novo', 'Cliente novo'], ['outro', 'Outro serviço']];
+const OPP_SERV = [['NR-01', 'NR-01'], ['palestra', 'Palestra'], ['formacao_lideres', 'Formação de líderes'], ['disc', 'DISC'], ['outro', 'Outro']];
+const OPP_ST = { aberta: ['Em negociação', '--blue'], ganha: ['Ganha', '--green'], perdida: ['Perdida', '--red'] };
+function empresaKey(nome) {
+  let k = String(nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return k.replace(/\b(s ?a|ltda|me|eireli|epp|mei)$/g, '').replace(/\s+/g, ' ').trim();
+}
+function saveOpp(u, data) {
+  const acc = finAccess(u); if (!acc) return { ok: false, error: 'Sem permissão' };
+  const d = data || {}, empresa = String(d.empresa || '').trim(), contato = String(d.contato || '').trim(), tipo = d.tipo, servico = nz(d.servico);
+  const userId = acc === 'admin' ? d.userId : u.id;
+  if (!empresa) return { ok: false, error: 'Informe o nome da empresa.' };
+  if (!contato) return { ok: false, error: 'Informe o contato na empresa.' };
+  if (!OPP_TIPOS.some(t => t[0] === tipo)) return { ok: false, error: 'Tipo de oportunidade inválido.' };
+  if (tipo === 'outro' ? !OPP_SERV.some(t => t[0] === servico) : (servico !== null && !OPP_SERV.some(t => t[0] === servico))) return { ok: false, error: 'Serviço inválido: escolha um serviço da lista.' };
+  if (!activeRecruiter(userId)) return { ok: false, error: 'Escolha um recrutador ativo como responsável.' };
+  const key = empresaKey(empresa); if (!key) return { ok: false, error: 'Informe o nome da empresa.' };
+  const ex = db.opps.find(o => o.empresaKey === key && o.status !== 'perdida');
+  if (ex) return { ok: false, error: `Empresa já registrada por ${(by('users', ex.userId) || {}).name || 'outro recrutador'} em ${brDate(ex.createdAt.slice(0, 10))}.`, existing: { by: (by('users', ex.userId) || {}).name || 'outro recrutador', at: brDate(ex.createdAt.slice(0, 10)) } };
+  const o = { id: uid('op'), userId, empresa, empresaKey: key, contato, createdAt: nowISO(), tipo, servico, status: 'aberta', jobId: null, companyId: null, valor: null, contratoData: null, fatRecebimento: null };
+  db.opps.push(o); audit('Oportunidade registrada', empresa); save(); return { ok: true, id: o.id };
+}
+function updateOpp(u, id, patch) {
+  const acc = finAccess(u), o = db.opps.find(x => x.id === id); if (!acc || !o) return { ok: false, error: 'Oportunidade não encontrada' };
+  if (acc !== 'admin' && o.userId !== u.id) return { ok: false, error: 'Sem permissão' };
+  const pt = patch || {}, st = pt.status || o.status; if (!OPP_ST[st]) return { ok: false, error: 'Status inválido' };
+  if (st === 'ganha' && acc !== 'admin') return { ok: false, error: 'Somente a coordenação marca uma oportunidade como ganha.' };
+  if (o.status === 'ganha' && acc !== 'admin') return { ok: false, error: 'Somente a coordenação altera uma oportunidade ganha.' };
+  const n = Object.assign({}, o, { status: st });
+  if (st === 'ganha') {
+    const D = Comissoes.isDate;
+    ['jobId', 'companyId', 'contratoData', 'fatRecebimento'].forEach(k => { if (k in pt) n[k] = nz(pt[k]); });
+    if ('valor' in pt) n.valor = nz(pt.valor) === null ? null : paramNum(pt.valor);
+    if (o.tipo === 'outro') {
+      if (!(n.valor > 0)) return { ok: false, error: 'Informe o valor do serviço vendido.' };
+      if (!D(n.contratoData)) return { ok: false, error: 'Informe a data do contrato.' };
+      if (n.fatRecebimento !== null && !D(n.fatRecebimento)) return { ok: false, error: 'Data de recebimento da fatura inválida.' };
+      if (n.fatRecebimento && n.fatRecebimento < n.contratoData) return { ok: false, error: 'O recebimento não pode ser anterior à data do contrato.' };
+      n.jobId = null; n.companyId = null;
+    } else if (o.tipo === 'vaga_extra') {
+      if (!n.jobId || !by('jobs', n.jobId)) return { ok: false, error: 'Escolha a vaga vinculada a esta oportunidade.' };
+      if (db.opps.some(x => x.id !== o.id && x.status === 'ganha' && x.jobId === n.jobId)) return { ok: false, error: 'Esta vaga já está vinculada a outra oportunidade ganha.' };
+      n.companyId = null; n.valor = null; n.fatRecebimento = null;
+    } else {
+      if (!n.companyId || !by('companies', n.companyId)) return { ok: false, error: 'Escolha a empresa cliente cadastrada.' };
+      if (!D(n.contratoData)) return { ok: false, error: 'Informe a data de início do contrato.' };
+      if (db.opps.some(x => x.id !== o.id && x.status === 'ganha' && x.tipo === 'cliente_novo' && x.companyId === n.companyId)) return { ok: false, error: 'Esta empresa já está vinculada a outra oportunidade de cliente novo.' };
+      n.jobId = null; n.valor = null; n.fatRecebimento = null;
+    }
+  }
+  if (!oppMonthsOpen(o, n)) return { ok: false, error: 'Mês fechado' };
+  Object.assign(o, n); audit('Oportunidade atualizada', o.empresa + ' — ' + OPP_ST[st][0]); save(); return { ok: true };
+}
+function oppMonthsOpen(o, n) {
+  if (o.status !== 'ganha' && n.status !== 'ganha') return true;
+  const p = payParams(), months = [];
+  [o, n].forEach(x => { if (x.status !== 'ganha') return;
+    if (x.tipo === 'outro') months.push(Comissoes.competencia({ admissao: null, contratoInicio: x.contratoData, fatura: { recebimento: x.fatRecebimento } }, p));
+    else db.jobs.filter(j => j.fin && (x.tipo === 'vaga_extra' ? j.id === x.jobId : j.companyId === x.companyId)).forEach(j => months.push(Comissoes.competencia(j.fin, p))); });
+  return !months.some(monthClosed);
+}
+const oppsFor = u => { const acc = finAccess(u); return !acc ? [] : db.opps.filter(o => acc === 'admin' || o.userId === u.id); };
+function oppsView(u, admin) {
+  const recs = db.users.filter(x => x.role === 'recruiter' && x.active !== false).map(x => [x.id, x.name]);
+  let list = oppsFor(u); if (admin && ui.oppUser) list = list.filter(o => o.userId === ui.oppUser);
+  list = list.slice().sort((a, b) => (a.status === 'aberta' ? 0 : 1) - (b.status === 'aberta' ? 0 : 1) || b.createdAt.localeCompare(a.createdAt));
+  const form = `<section class="card mb"><h3>Registrar oportunidade</h3><p class="sm mut mb">Registre a empresa assim que iniciar a negociação: quem registra primeiro garante a originação.</p>
+  <form data-form="opp" class="stack"><div class="fg">${admin ? fld('Recrutador(a)', sel('userId', recs, ui.oppUser || '', 'Escolha', 'required')) : ''}${fld('Empresa', inp('empresa', '', { req: 1 }))}${fld('Contato (nome e telefone ou e-mail)', inp('contato', '', { req: 1 }))}${fld('Tipo', sel('tipo', OPP_TIPOS, 'vaga_extra'))}${fld('Serviço (obrigatório em "Outro serviço")', sel('servico', OPP_SERV, '', '—'))}</div>
+  <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Registrar</button></div></form><div id="opp-msg" aria-live="polite"></div></section>`;
+  const filt = admin ? `<div class="flex gap wrap mb" style="align-items:flex-end">${fld('Recrutador(a)', sel('oppUser', recs, ui.oppUser || '', 'Todos', 'data-act="paySel" data-k="oppUser"'))}</div>` : '';
+  const row = o => { const st = OPP_ST[o.status], mine = admin || o.userId === u.id;
+    const det = o.status === 'ganha' ? (o.tipo === 'outro' ? `${money(o.valor)} · contrato ${brDate(o.contratoData)}${o.fatRecebimento ? ' · fatura recebida ' + brDate(o.fatRecebimento) : ' · fatura não recebida'}` : o.tipo === 'vaga_extra' ? 'Vaga: ' + esc((by('jobs', o.jobId) || {}).title || '—') : 'Cliente: ' + esc(compName(o.companyId)) + ' · contrato ' + brDate(o.contratoData)) : '';
+    return `<tr data-id="${o.id}"><td><b>${esc(o.empresa)}</b><div class="xs mut">${esc(o.contato)}</div>${det ? `<div class="xs">${det}</div>` : ''}</td><td>${esc((OPP_TIPOS.find(t => t[0] === o.tipo) || [0, o.tipo])[1])}${o.servico ? `<div class="xs mut">${esc((OPP_SERV.find(t => t[0] === o.servico) || [0, o.servico])[1])}</div>` : ''}</td>${admin ? `<td>${esc((by('users', o.userId) || {}).name || '—')}</td>` : ''}<td>${brDate(o.createdAt.slice(0, 10))}</td><td><span class="badge" style="--c:var(${st[1]})">${st[0]}</span></td>
+    <td style="text-align:right"><div class="flex gap wrap" style="justify-content:flex-end">${admin && o.status !== 'perdida' ? `<button class="btn sm ${o.status === 'aberta' ? 'pri' : ''}" data-act="oppWin" data-id="${o.id}">${o.status === 'aberta' ? 'Marcar como ganha' : 'Editar'}</button>` : ''}${mine && o.status === 'aberta' ? `<button class="btn sm" data-act="oppLost" data-id="${o.id}">Marcar como perdida</button>` : ''}</div></td></tr>`; };
+  return form + `<section class="card mb" id="opp-list"><h3>${admin ? 'Oportunidades' : 'Minhas oportunidades'} (${list.length})</h3>${filt}${list.length ? `<div class="tw"><table><thead><tr><th>Empresa</th><th>Tipo</th>${admin ? '<th>Recrutador(a)</th>' : ''}<th>Registrada em</th><th>Situação</th><th></th></tr></thead><tbody>${list.map(row).join('')}</tbody></table></div>` : '<p class="mut sm">Nenhuma oportunidade registrada.</p>'}</section>`;
+}
+function oppWinModal(id) {
+  const o = db.opps.find(x => x.id === id); if (!o) return;
+  const D = (l, k, v) => fld(l, inp(k, v || '', { type: 'date' }));
+  const body = o.tipo === 'outro'
+    ? `<div class="fg">${fld('Valor do serviço (R$)', inp('valor', o.valor || '', { type: 'number', req: 1, attrs: 'step="any" min="0"' }))}${D('Data do contrato', 'contratoData', o.contratoData)}${D('Recebimento da fatura (se já recebida)', 'fatRecebimento', o.fatRecebimento)}</div>`
+    : o.tipo === 'vaga_extra'
+      ? fld('Vaga vinculada', sel('jobId', db.jobs.filter(j => j.status !== 'draft').map(j => [j.id, j.title + ' — ' + compName(j.companyId)]), o.jobId, 'Escolha', 'required'))
+      : `<div class="fg">${fld('Empresa cliente cadastrada', sel('companyId', db.companies.map(c => [c.id, c.name]), o.companyId, 'Escolha', 'required'))}${D('Início do contrato', 'contratoData', o.contratoData)}</div><p class="xs mut">Todas as vagas desta empresa com fatura em até ${payParams().carteiraMeses} meses do início do contrato geram originação.</p>`;
+  openModal(o.status === 'ganha' ? 'Editar oportunidade ganha' : 'Marcar como ganha', `<p class="sm mut mb">${esc(o.empresa)} — ${esc((by('users', o.userId) || {}).name || '')}</p><form data-form="oppWin" data-id="${o.id}" class="stack">${body}<div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button type="submit" class="btn pri">Salvar</button></div></form>`);
+}
+const COM_TABS = [['', 'Vagas sem financeiro'], ['com', 'Vagas com financeiro'], ['oportunidades', 'Oportunidades'], ['extratos', 'Extratos'], ['parametros', 'Parâmetros']];
 const comTabs = c => `<nav class="fin-tabs mb" aria-label="Seções de comissões">${COM_TABS.map(x => `<a class="btn sm ${(c || '') === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}"${(c || '') === x[0] ? ' aria-current="page"' : ''}>${x[1]}</a>`).join('')}</nav>`;
 const FIN_SIT = [['', 'Todas as situações'], ['aprovacao', 'Aguardando aprovação'], ['fatura', 'Aguardando fatura'], ['extrato', 'Com mês de extrato'], ['sem', 'Sem comissão (status)']];
 function finSituation(j) {
@@ -2071,12 +2158,14 @@ function comissoesView(c) {
   const u = curUser(), acc = finAccess(u); if (!acc) return denied();
   if (acc !== 'admin') {
     if (c === 'parametros') return denied();
-    return shell(pageHead('Minhas comissões', 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + extratoPage(u, false));
+    const rt = c === 'oportunidades' ? 'oportunidades' : '';
+    const nav = `<nav class="fin-rtabs mb" aria-label="Minhas comissões">${[['', 'Meu extrato'], ['oportunidades', 'Minhas oportunidades']].map(x => `<a class="btn sm ${rt === x[0] ? 'pri' : ''}" href="#/s/comissoes${x[0] ? '/' + x[0] : ''}"${rt === x[0] ? ' aria-current="page"' : ''}>${x[1]}</a>`).join('')}</nav>`;
+    return shell(pageHead('Minhas comissões', rt ? 'Registre as empresas que você está prospectando.' : 'Seu extrato do mês: ajuda de custo, DAS-MEI, valor base e comissões.') + finEnv() + nav + (rt ? oppsView(u, false) : extratoPage(u, false)));
   }
   const tab = COM_TABS.some(x => x[0] === (c || '')) ? (c || '') : '';
   if (tab !== 'parametros') ui.paramEdit = false;
-  const sub = { '': 'Vagas que ainda precisam do financeiro preenchido.', com: 'Vagas com financeiro preenchido, para conferência e correção.', extratos: 'Escolha a recrutadora e o mês para ver o extrato.', parametros: 'Valores da política usados em todos os cálculos.' }[tab];
-  const body = tab === 'com' ? finComHtml() : tab === 'extratos' ? extratoPage(u, true) + polCard() : tab === 'parametros' ? paramsBody() : finPendingHtml();
+  const sub = { oportunidades: 'Empresas registradas pelas recrutadoras e originação.', '': 'Vagas que ainda precisam do financeiro preenchido.', com: 'Vagas com financeiro preenchido, para conferência e correção.', extratos: 'Escolha a recrutadora e o mês para ver o extrato.', parametros: 'Valores da política usados em todos os cálculos.' }[tab];
+  const body = tab === 'oportunidades' ? oppsView(u, true) : tab === 'com' ? finComHtml() : tab === 'extratos' ? extratoPage(u, true) + polCard() : tab === 'parametros' ? paramsBody() : finPendingHtml();
   return shell(pageHead('Comissões', sub) + finEnv() + comTabs(tab) + body);
 }
 
@@ -2085,7 +2174,17 @@ const FIN_TIPOS = [['geral', 'Vaga geral'], ['contabil', 'Vaga contábil']];
 const FIN_STATUS = [['aberta', 'Aberta'], ['fechada', 'Fechada'], ['reposicao', 'Reposição'], ['cancelada', 'Cancelada'], ['congelada', 'Congelada']];
 const FIN_FAT = [['aberta', 'Ainda não emitida'], ['emitida', 'Emitida'], ['recebida', 'Recebida']];
 const FIN_ORIG = [['vaga_extra', 'Vaga extra'], ['cliente_novo', 'Cliente novo'], ['outro', 'Outro']];
-const finJob = j => ({ id: j.id, cliente: compName(j.companyId), cargo: j.title, fin: j.fin });
+function oppOrigFor(j) {
+  return (db.opps || []).find(o => o.status === 'ganha' && ((o.tipo === 'vaga_extra' && o.jobId === j.id) || (o.tipo === 'cliente_novo' && o.companyId && o.companyId === j.companyId)));
+}
+const finJob = j => {
+  let fin = j.fin; const o = fin && !fin.originadaPor ? oppOrigFor(j) : null;
+  if (o) fin = Object.assign({}, fin, { originadaPor: o.userId, origTipo: o.tipo, contratoInicio: fin.contratoInicio || o.contratoData || null });
+  return { id: j.id, cliente: compName(j.companyId), cargo: j.title, fin };
+};
+const oppJobs = () => (db.opps || []).filter(o => o.status === 'ganha' && o.tipo === 'outro' && o.valor > 0).map(o => ({ id: 'opp_' + o.id, cliente: o.empresa, cargo: (OPP_SERV.find(x => x[0] === o.servico) || [0, 'Serviço'])[1],
+  fin: { tipo: 'geral', valor: o.valor, gupy: false, alinhamento: null, aprovacao: null, diasSuspensos: 0, admissao: null, status: 'fechada', garantia: null,
+    fatura: { emissao: null, status: o.fatRecebimento ? 'recebida' : 'aberta', recebimento: o.fatRecebimento || null }, parts: [], originadaPor: o.userId, origTipo: 'outro', contratoInicio: o.contratoData } }));
 const monthClosed = m => !!m && db.payClosings.some(c => c.month === m);
 const nz = v => (v === undefined || v === null || String(v).trim() === '') ? null : String(v).trim();
 function activeRecruiter(id) { const r = by('users', id); return !!r && r.role === 'recruiter' && r.active !== false; }
@@ -2190,6 +2289,8 @@ const actions = {
   paramCancel() { ui.paramEdit = false; render(true); },
   finRemove(t) { const j = by('jobs', t.dataset.id); if (j && j.fin) confirmBox('Remover financeiro', `Remover o financeiro da vaga "${esc(j.title)}"? Ela volta para "Vagas sem financeiro" e as comissões dela saem dos extratos em aberto.`, 'Remover', 'finRemoveDo', { id: j.id }, true); },
   finRemoveDo(t) { const r = removeJobFin(curUser(), t.dataset.id); closeModal(); if (!r.ok) return toast(r.error === 'Mês fechado' ? 'Mês fechado: esta comissão já foi paga. Use um ajuste na coordenação.' : r.error, true); toast('Financeiro removido. A vaga voltou para "Vagas sem financeiro".'); render(true); },
+  oppWin(t) { if (curUser().role === 'admin') oppWinModal(t.dataset.id); },
+  oppLost(t) { const r = updateOpp(curUser(), t.dataset.id, { status: 'perdida' }); if (!r.ok) return toast(r.error, true); toast('Oportunidade marcada como perdida.'); render(true); },
   paySel(t) { ui[t.dataset.k] = t.value; render(true); },
   finPreview() { const f = $('form[data-form="jobFin"]'), box = $('#fin-prev'); if (f && box) box.innerHTML = finPreviewHtml(readJobFin(f)); },
   finSplit() { const f = $('form[data-form="jobFin"]'); if (!f) return; f.elements.p1_pct.value = 50; f.elements.p2_pct.value = 50; },
@@ -2391,6 +2492,16 @@ const actions = {
 
 /* ---------- Formulários (data-form) ---------- */
 const forms = {
+  opp(f) {
+    const fd = new FormData(f), r = saveOpp(curUser(), { userId: fd.get('userId'), empresa: fd.get('empresa'), contato: fd.get('contato'), tipo: fd.get('tipo'), servico: fd.get('servico') });
+    if (!r.ok) { const m = $('#opp-msg'); if (m) m.innerHTML = `<p class="fin-warn">${esc(r.error)}</p>`; return toast(r.error, true); }
+    toast('Oportunidade registrada.'); render(true);
+  },
+  oppWin(f) {
+    const fd = new FormData(f), p = { status: 'ganha' }; ['valor', 'contratoData', 'fatRecebimento', 'jobId', 'companyId'].forEach(k => { if (fd.has(k)) p[k] = fd.get(k); });
+    const r = updateOpp(curUser(), f.dataset.id, p); if (!r.ok) return toast(r.error === 'Mês fechado' ? 'Mês fechado: a originação desta oportunidade já foi paga. Use um ajuste na coordenação.' : r.error, true);
+    closeModal(); toast('Oportunidade atualizada.'); render(true);
+  },
   jobFin(f) {
     const u = curUser(), r = saveJobFin(u, f.dataset.id, readJobFin(f)); if (!r.ok) return toast(r.errors[0], true);
     toast('Financeiro da vaga salvo.'); render(true);
@@ -2702,5 +2813,5 @@ ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess, saveJobFin, jobFinSummary, finJob, payStatement, loadPolicyCases, removePolicyCases, removeJobFin, empresaKey, saveOpp, updateOpp, oppsFor }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();

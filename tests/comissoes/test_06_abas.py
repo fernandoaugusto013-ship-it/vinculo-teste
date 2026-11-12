@@ -9,9 +9,9 @@ def tabs(app): return [t.strip() for t in app.page.eval_on_selector_all('.fin-ta
 
 def test_tab_order_and_default(app):
     app.login('u_admin'); app.go('#/s/comissoes')
-    assert tabs(app) == ['Vagas sem financeiro', 'Vagas com financeiro', 'Extratos', 'Parâmetros']
+    assert tabs(app) == ['Vagas sem financeiro', 'Vagas com financeiro', 'Oportunidades', 'Extratos', 'Parâmetros']
     assert app.page.locator('#fin-pend').count() == 1
-    for h in ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/extratos']:
+    for h in ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/oportunidades', '#/s/comissoes/extratos']:
         app.go(h); app.page.wait_for_timeout(120)
         assert app.page.locator('form[data-form="payParams"]').count() == 0, h
     app.go('#/s/comissoes/extratos'); assert app.page.locator('[data-act="polLoad"]').count() == 1

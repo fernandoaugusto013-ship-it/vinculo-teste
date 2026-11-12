@@ -56,7 +56,7 @@ CONTRAST = """() => {
   const bgOf = el => { for (let e = el; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; const a = b.match(/[\\d.]+/g); if (a && (a.length < 4 || +a[3] > .5)) return b; } return getComputedStyle(document.body).backgroundColor; };
   const bad = [];
   document.querySelectorAll('main *, .main *').forEach(el => {
-    if (!el.closest('.fin-env, .fin-tabs, #fin-pend, #fin-com, .fin-ex, .fin-tb, form[data-form=payParams], form[data-form=jobFin]')) return;
+    if (!el.closest('#opp-list, form[data-form=opp], .fin-env, .fin-tabs, #fin-pend, #fin-com, .fin-ex, .fin-tb, form[data-form=payParams], form[data-form=jobFin]')) return;
     if (el.closest('.badge.dot')) return; /* selo de status de vaga já existente no sistema (jobStBadge) — fora do escopo, reportado */
     const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()); if (!own || el.offsetParent === null) return;
     const cs = getComputedStyle(el); if (cs.visibility === 'hidden') return;
@@ -68,9 +68,11 @@ CONTRAST = """() => {
 
 def test_contrast_light_and_dark(app):
     app.login('u_admin'); seed_rec2(app)
+    for e, st in [('Alfa', 'aberta'), ('Beta', 'perdida')]:
+        app.ev("([e, st]) => { const r = __V.fin.saveOpp(__V.db.users.find(x => x.id === 'u_admin'), { userId: 'u_rec1', empresa: e, contato: 'c', tipo: 'vaga_extra', servico: '' }); if (st !== 'aberta') __V.fin.updateOpp(__V.db.users.find(x => x.id === 'u_admin'), r.id, { status: st }); }", [e, st])
     jid = app.ev("() => __V.db.jobs[0].id")
     for theme in ['light', 'dark']:
-        for h in ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/extratos', '#/s/comissoes/parametros', f'#/s/vaga/{jid}/financeiro']:
+        for h in ['#/s/comissoes', '#/s/comissoes/com', '#/s/comissoes/oportunidades', '#/s/comissoes/extratos', '#/s/comissoes/parametros', f'#/s/vaga/{jid}/financeiro']:
             app.go(h); app.ev(f"() => {{ document.documentElement.setAttribute('data-theme', '{theme}'); document.documentElement.style.colorScheme = '{theme}'; }}")
             app.page.wait_for_timeout(150)
             bad = app.ev(CONTRAST); assert bad == [], (theme, h, bad[:6])
