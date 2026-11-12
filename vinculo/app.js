@@ -244,8 +244,8 @@ function seedDB() {
   ];
   d.users.push(
     { id: 'u_admin', role: 'admin', name: 'Helena Prado', email: 'admin@vinculo.demo', pass: 'demo123', active: true },
-    { id: 'u_rec1', role: 'recruiter', name: 'Camila Duarte', email: 'recrutador@vinculo.demo', pass: 'demo123', active: true },
-    { id: 'u_rec2', role: 'recruiter', name: 'Rafael Lima', email: 'rafael@vinculo.demo', pass: 'demo123', active: true }
+    { id: 'u_rec1', role: 'recruiter', name: 'Camila Duarte', email: 'recrutador@vinculo.demo', pass: 'demo123', active: true, startDate: '2025-03-10' },
+    { id: 'u_rec2', role: 'recruiter', name: 'Rafael Lima', email: 'rafael@vinculo.demo', pass: 'demo123', active: true, startDate: '2025-06-02' }
   );
   d.companies.forEach(c => d.users.push({ id: 'u_' + c.id, role: 'client', name: c.contact, email: c.email, pass: 'demo123', companyId: c.id, active: true }));
 
@@ -480,7 +480,7 @@ function shell(content) {
   } else {
     const reqs = db.requests.filter(r => r.status === 'nova').length;
     links = nl('/s/dashboard', 'chart', 'Tela Principal') + grp('Recrutamento') + nl('/s/vagas', 'brief', 'Vagas') + nl('/s/kanban', 'kanban', 'Kanban') + nl('/s/triagem', 'search', 'Triagem') + nl('/s/banco', 'users', 'Banco de Talentos') + nl('/s/solicitacoes', 'inbox', 'Solicitações', reqs)
-      + grp('Análise') + indMenu + nl('/s/metas', 'star', 'Metas', u.role === 'recruiter' ? lateGoalsFor(u).length : 0) + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios')
+      + grp('Análise') + indMenu + nl('/s/metas', 'star', 'Metas', u.role === 'recruiter' ? lateGoalsFor(u).length : 0) + (u.role === 'admin' ? nl('/s/comissoes', 'trend', 'Comissões') : u.role === 'recruiter' ? nl('/s/comissoes', 'trend', 'Minhas comissões') : '') + nl('/s/ia', 'spark', 'Análise com IA') + nl('/s/relatorios', 'file', 'Relatórios')
       + grp('Comunicação') + nl('/s/comunicacoes', 'mail', 'Comunicações') + nl('/s/notificacoes', 'bell', 'Notificações', n);
     if (u.role === 'admin') links += grp('Administração') + nl('/s/empresas', 'building', 'Empresas clientes') + nl('/s/usuarios', 'user', 'Usuários e acessos') + nl('/s/cargos', 'tag', 'Cargos') + nl('/s/lgpd', 'shield', 'Privacidade (LGPD)');
     const act = db.apps.filter(a => !CLOSED.includes(a.stage)), nw = act.filter(a => a.stage === 'novo').length, ok = act.length ? Math.round(100 * (act.length - nw) / act.length) : 100;
@@ -1526,6 +1526,7 @@ function route() {
         case 'dashboard': return dashboard();
         case 'indicadores': return indicadoresView(c);
         case 'metas': return metasView();
+        case 'comissoes': return comissoesView(c);
         case 'vagas': return jobsAdmin();
         case 'vaga':
           if (c === 'nova') {
@@ -1934,6 +1935,50 @@ function metasView() {
   return denied();
 }
 
+/* ---------- Comissões ---------- */
+function ensurePayDb() {
+  if (!db.payParams || typeof db.payParams !== 'object') db.payParams = { current: Comissoes.defaultParams(), history: [] };
+  if (!db.payParams.current) db.payParams.current = Comissoes.defaultParams(); if (!Array.isArray(db.payParams.history)) db.payParams.history = [];
+  ['opps', 'payAdjust', 'payClosings', 'payAlerts'].forEach(k => { if (!Array.isArray(db[k])) db[k] = []; });
+}
+const payParams = () => db.payParams.current;
+const finAccess = u => !u ? null : u.role === 'admin' ? 'admin' : u.role === 'recruiter' ? 'recruiter' : null;
+const money = v => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function savePayParams(u, patch) {
+  if (finAccess(u) !== 'admin') return { ok: false, errors: ['Sem permissão para esta ação.'] };
+  const cur = payParams(), next = JSON.parse(JSON.stringify(cur)), keys = Object.keys(patch || {});
+  keys.forEach(k => { if (k === 'tabelas') next.tabelas = JSON.parse(JSON.stringify(patch.tabelas)); else if (k in cur) next[k] = patch[k]; });
+  const v = Comissoes.validateParams(next); if (!v.ok) return { ok: false, errors: v.errors };
+  const now = nowISO(); let n = 0;
+  keys.forEach(k => {
+    if (k === 'tabelas') ['geral', 'contabil'].forEach(t => { if (JSON.stringify(cur.tabelas[t]) !== JSON.stringify(next.tabelas[t])) { db.payParams.history.unshift({ at: now, by: u.name, key: 'tabelas.' + t, from: cur.tabelas[t], to: next.tabelas[t] }); n++; } });
+    else if (k in cur && cur[k] !== next[k]) { db.payParams.history.unshift({ at: now, by: u.name, key: k, from: cur[k], to: next[k] }); n++; }
+  });
+  db.payParams.current = next; if (n) { audit('Parâmetros de comissão alterados', n + ' alteração(ões)'); save(); }
+  return { ok: true, changed: n };
+}
+const finEnv = () => '<div class="fin-env" role="note">Ambiente de teste — dados fictícios. Valores e regras ainda em validação.</div>';
+const PARAM_LABEL = { impostos: 'Impostos (%)', despesas: 'Despesas operacionais (%)', faixaMinima: 'Faixa mínima para valor base proporcional (%)', origPct: 'Comissão de originação (%)', gupy: 'Licença Gupy por vaga (R$)', metaBase: 'Meta base mensal — valor líquido (R$)', metaAdaptacao: 'Meta de adaptação (R$)', valorBase: 'Valor base mensal (R$)', ajudaCusto: 'Ajuda de custo (R$)', das: 'Reembolso DAS-MEI (R$)', carteiraMeses: 'Prazo da carteira de cliente novo (meses)', clienteNovoMeses: 'Cliente novo: sem contrato nos últimos (meses)', carenciaDias: 'Carência após a admissão (dias)', adaptacaoMeses: 'Meses de adaptação do recrutador', diaPagamento: 'Dia do pagamento', diaPlanilha: 'Dia do envio da planilha', diaConferencia: 'Dia da conferência', toleranciaDiasUteis: 'Tolerância de atraso do cliente (dias úteis, informativo)', alertaDias: 'Alerta antes de mudar de faixa (dias)' };
+const PARAM_PCT = ['impostos', 'despesas', 'faixaMinima', 'origPct'];
+const paramNum = v => { const t = String(v == null ? '' : v).trim().replace(',', '.'); return t === '' ? NaN : Number(t); };
+function paramsView() {
+  const p = payParams(), field = k => fld(PARAM_LABEL[k], inp(k, PARAM_PCT.includes(k) ? Math.round(p[k] * 10000) / 100 : p[k], { type: 'number', req: true, attrs: 'step="any" min="0"' }));
+  const grp = (t, ks) => `<section class="card mb"><h3>${t}</h3><div class="fg">${ks.map(field).join('')}</div></section>`;
+  const tab = tp => `<div><h4>${tp === 'geral' ? 'Vaga geral' : 'Vaga contábil'} (dias corridos)</h4>${p.tabelas[tp].map((r, i, a) => `<div class="fin-row"><span>${i === a.length - 1 ? 'Acima de ' + (a[i - 1] ? a[i - 1].ate : 0) + ' dias' : (i === 0 ? 'Até' : 'Até') }</span>${i === a.length - 1 ? '' : `<input type="number" name="t_${tp}_${i}_ate" value="${r.ate}" min="0" step="1" aria-label="Limite de dias da faixa ${i + 1}" required>`}<span>dias →</span><input type="number" name="t_${tp}_${i}_pct" value="${Math.round(r.pct * 10000) / 100}" min="0" max="100" step="any" aria-label="Percentual da faixa ${i + 1}" required><span>%</span></div>`).join('')}</div>`;
+  const hist = db.payParams.history.slice(0, 30).map(h => `<tr><td>${fdate(h.at)}</td><td>${esc(h.by)}</td><td>${esc(PARAM_LABEL[h.key] || h.key)}</td><td>${esc(typeof h.from === 'object' ? JSON.stringify(h.from) : h.from)}</td><td>${esc(typeof h.to === 'object' ? JSON.stringify(h.to) : h.to)}</td></tr>`).join('');
+  return shell(pageHead('Parâmetros de comissão', 'Todos os valores da política são editáveis. As alterações valem para os próximos cálculos.') + finEnv() +
+    `<form data-form="payParams" class="stack">${grp('Percentuais', ['impostos', 'despesas', 'faixaMinima', 'origPct'])}${grp('Valores', ['gupy', 'metaBase', 'metaAdaptacao', 'valorBase', 'ajudaCusto', 'das'])}${grp('Prazos e datas', ['carteiraMeses', 'clienteNovoMeses', 'carenciaDias', 'adaptacaoMeses', 'diaPagamento', 'diaPlanilha', 'diaConferencia', 'toleranciaDiasUteis', 'alertaDias'])}
+    <section class="card mb"><h3>Comissão por prazo de fechamento</h3><div class="g2">${tab('geral')}${tab('contabil')}</div></section>
+    <div class="flex gap wrap" style="justify-content:flex-end"><button type="submit" class="btn pri">Salvar parâmetros</button></div></form>
+    <section class="card mt"><h3>Histórico de alterações</h3>${hist ? `<div class="tw"><table class="fin-hist"><thead><tr><th>Quando</th><th>Quem</th><th>Parâmetro</th><th>De</th><th>Para</th></tr></thead><tbody>${hist}</tbody></table></div>` : '<p class="mut">Nenhuma alteração até agora.</p>'}</section>`);
+}
+function comissoesView(c) {
+  const u = curUser(), acc = finAccess(u); if (!acc) return denied();
+  if (c === 'parametros' && acc !== 'admin') return denied();
+  if (acc === 'admin') return paramsView();
+  return shell(pageHead('Minhas comissões', 'Seu extrato e suas metas financeiras.') + finEnv());
+}
+
 const actions = {
   metaTab(t) { ui.metaTab = t.dataset.v; render(true); },
   goalNew() { goalSelfModal(null); },
@@ -1963,7 +2008,7 @@ const actions = {
   logout() { Auth.logout(); ui.side = false; closeModal(); if (location.hash === '#/') render(); else go('/'); toast('Você saiu da conta.'); },
   demoLogin(t) { const u = Auth.login(t.dataset.email, 'demo123'); if (!u) return toast('Conta de demonstração indisponível. Restaure os dados.', true); toast(`Bem-vindo(a), ${u.name.split(' ')[0]}!`); go(homeOf(u)); },
   reset() { confirmBox('Restaurar dados de demonstração', 'Todos os dados criados neste navegador serão apagados e os dados de exemplo voltam ao estado inicial.', 'Restaurar', 'doReset', {}, true); },
-  doReset() { Persist.clear(); db = seedDB(); ensureGoalsDb(); Sess.set(null); save(); Object.assign(ui, { jobs: {}, tb: { limit: 18 }, tri: { stage: 'novo' }, boardq: '', cmp: {}, aiResult: null }); closeModal(); if (location.hash === '#/' || !location.hash) render(); else go('/'); toast('Dados de demonstração restaurados.'); },
+  doReset() { Persist.clear(); db = seedDB(); ensureGoalsDb(); ensurePayDb(); Sess.set(null); save(); Object.assign(ui, { jobs: {}, tb: { limit: 18 }, tri: { stage: 'novo' }, boardq: '', cmp: {}, aiResult: null }); closeModal(); if (location.hash === '#/' || !location.hash) render(); else go('/'); toast('Dados de demonstração restaurados.'); },
   addRow(t) { const g = t.dataset.g, box = $('#g-' + g); if (box && ROWS[g]) box.insertAdjacentHTML('beforeend', ROWS[g]({})); },
   delRow(t) { const r = t.closest('.rep'); if (r) r.remove(); },
   delChip(t) { const c = t.closest('.chip'); if (c) c.remove(); },
@@ -2057,7 +2102,7 @@ const actions = {
     openModal('Nova empresa cliente', `<form data-form="company" class="stack"><div class="fg">${companyFields({})}</div><p class="xs mut">Criamos um acesso de empresa cliente para o contato, com a senha de demonstração <span class="mono">demo123</span>.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar empresa e acesso</button></div></form>`);
   },
   userMenu() {
-    openModal('Novo usuário interno', `<form data-form="user" class="stack"><div class="fg">${fld('Nome', inp('name', '', { req: 1 }))}${fld('E-mail', inp('email', '', { type: 'email', req: 1 }))}${fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], 'recruiter'))}${fld('CPF ou CNPJ', inp('doc', '', { attrs: 'data-mask="doc" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="CPF ou CNPJ"' }), 'obrigatório para recrutador')}${fld('Telefone', inp('phone', '', { attrs: PH_ATTR }))}${fld('Senha inicial', inp('pass', 'demo123', { req: 1, attrs: 'minlength="6"' }))}</div><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar usuário</button></div></form>`);
+    openModal('Novo usuário interno', `<form data-form="user" class="stack"><div class="fg">${fld('Nome', inp('name', '', { req: 1 }))}${fld('E-mail', inp('email', '', { type: 'email', req: 1 }))}${fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], 'recruiter'))}${fld('CPF ou CNPJ', inp('doc', '', { attrs: 'data-mask="doc" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="CPF ou CNPJ"' }), 'obrigatório para recrutador')}${fld('Início na empresa', inp('startDate', '', { type: 'date' }), 'obrigatório para recrutador')}${fld('Telefone', inp('phone', '', { attrs: PH_ATTR }))}${fld('Senha inicial', inp('pass', 'demo123', { req: 1, attrs: 'minlength="6"' }))}</div><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Criar usuário</button></div></form>`);
   },
   companyEdit(t) {
     const c = by('companies', t.dataset.id); if (!c) return;
@@ -2065,7 +2110,7 @@ const actions = {
   },
   userEdit(t) {
     const u = by('users', t.dataset.id); if (!u) return; const me = u.id === curUser().id, cli = u.role === 'client';
-    openModal('Editar cadastro', `<form data-form="userEdit" data-id="${u.id}" class="stack"><div class="fg">${fld('Nome', inp('name', u.name, { req: 1 }))}${fld('E-mail de acesso', inp('email', u.email, { type: 'email', req: 1 }))}${fld('Telefone', inp('phone', fmtPhone(userPhone(u)), { attrs: PH_ATTR }))}${cli ? '' : fld('CPF ou CNPJ', inp('doc', fmtDoc(u.doc), { attrs: 'data-mask="doc" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="CPF ou CNPJ"' }), u.role === 'recruiter' ? 'obrigatório' : '')}${cli ? fld('Perfil', `<input value="Empresa cliente — ${esc(compName(u.companyId))}" disabled>`) : fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], u.role, null, me ? 'disabled' : ''))}${fld('Status', sel('status', [['on', 'Ativo'], ['off', 'Inativo']], u.active === false ? 'off' : 'on', null, me ? 'disabled' : ''))}${passField('opcional')}</div><p class="xs mut">${cli ? 'Cidade, CNPJ e demais dados da empresa são editados em <a href="#/s/empresas" data-act="closeModal">Empresas clientes</a>. ' : ''}${me ? 'Você não pode alterar o próprio perfil nem desativar o próprio acesso. ' : ''}A senha atual nunca é exibida; informe uma nova apenas se quiser redefinir.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Salvar alterações</button></div></form>`);
+    openModal('Editar cadastro', `<form data-form="userEdit" data-id="${u.id}" class="stack"><div class="fg">${fld('Nome', inp('name', u.name, { req: 1 }))}${fld('E-mail de acesso', inp('email', u.email, { type: 'email', req: 1 }))}${fld('Telefone', inp('phone', fmtPhone(userPhone(u)), { attrs: PH_ATTR }))}${cli ? '' : fld('CPF ou CNPJ', inp('doc', fmtDoc(u.doc), { attrs: 'data-mask="doc" inputmode="numeric" maxlength="18" autocomplete="off" placeholder="CPF ou CNPJ"' }), u.role === 'recruiter' ? 'obrigatório' : '')}${cli ? '' : fld('Início na empresa', inp('startDate', u.startDate || '', { type: 'date' }), 'obrigatório para recrutador')}${cli ? fld('Perfil', `<input value="Empresa cliente — ${esc(compName(u.companyId))}" disabled>`) : fld('Perfil', sel('role', [['recruiter', 'Recrutador'], ['admin', 'Administrador']], u.role, null, me ? 'disabled' : ''))}${fld('Status', sel('status', [['on', 'Ativo'], ['off', 'Inativo']], u.active === false ? 'off' : 'on', null, me ? 'disabled' : ''))}${passField('opcional')}</div><p class="xs mut">${cli ? 'Cidade, CNPJ e demais dados da empresa são editados em <a href="#/s/empresas" data-act="closeModal">Empresas clientes</a>. ' : ''}${me ? 'Você não pode alterar o próprio perfil nem desativar o próprio acesso. ' : ''}A senha atual nunca é exibida; informe uma nova apenas se quiser redefinir.</p><div class="flex gap wrap" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">Cancelar</button><button class="btn pri">Salvar alterações</button></div></form>`);
   },
   cargoMenu() { cargoModal(null); },
   cargoEdit(t) { const c = (db.cargos || []).find(x => x.id === t.dataset.id); if (c) cargoModal(c); },
@@ -2133,6 +2178,14 @@ const actions = {
 
 /* ---------- Formulários (data-form) ---------- */
 const forms = {
+  payParams(f) {
+    const u = curUser(), fd = new FormData(f), patch = {}, p = payParams();
+    Object.keys(PARAM_LABEL).forEach(k => { const v = paramNum(fd.get(k)); patch[k] = PARAM_PCT.includes(k) ? v / 100 : v; });
+    patch.tabelas = JSON.parse(JSON.stringify(p.tabelas));
+    ['geral', 'contabil'].forEach(tp => patch.tabelas[tp].forEach((r, i, a) => { r.pct = paramNum(fd.get(`t_${tp}_${i}_pct`)) / 100; if (i < a.length - 1) r.ate = paramNum(fd.get(`t_${tp}_${i}_ate`)); }));
+    const r = savePayParams(u, patch); if (!r.ok) return toast(r.errors[0], true);
+    toast(r.changed ? 'Parâmetros salvos.' : 'Nenhuma alteração.'); render(true);
+  },
   goalAdmin(f) {
     const u = curUser(); if (u.role !== 'admin') return; const fd = new FormData(f), metric = fd.get('metric'), month = fd.get('month'), recs = fd.getAll('rec');
     if (!recs.length) return toast('Escolha ao menos uma recrutadora.', true);
@@ -2266,7 +2319,8 @@ const forms = {
     if (g('role') === 'recruiter' && !dd.d) return toast('Informe o CPF ou CNPJ do recrutador.', true);
     if (dd.d && db.users.some(x => x.doc === dd.d)) return toast('Já existe um usuário com este CPF/CNPJ.', true);
     const ph = phoneOf(g('phone')); if (ph.err) return toast(ph.err, true);
-    db.users.push({ id: uid('u_'), role: g('role'), name: g('name'), email, doc: dd.d, phone: ph.d, pass: g('pass'), active: true }); audit('Usuário criado', email); save(); closeModal(); render(true); toast('Usuário criado.');
+    const sd = g('startDate'); if (g('role') === 'recruiter' && !Comissoes.isDate(sd)) return toast('Informe a data de início do recrutador.', true);
+    db.users.push({ id: uid('u_'), role: g('role'), name: g('name'), email, doc: dd.d, phone: ph.d, pass: g('pass'), active: true, startDate: sd || null }); audit('Usuário criado', email); save(); closeModal(); render(true); toast('Usuário criado.');
   },
   companyEdit(f) {
     if (!validate(f)) return;
@@ -2297,7 +2351,9 @@ const forms = {
       if (doc && db.users.some(x => x.id !== u.id && x.doc === doc)) return toast('Já existe um usuário com este CPF/CNPJ.', true);
     }
     if (u.role === 'admin' && (role !== 'admin' || !active) && !db.users.some(x => x.id !== u.id && x.role === 'admin' && x.active !== false)) return toast('É preciso manter ao menos um administrador ativo.', true);
+    const sd = g('startDate'); if (!cli && role === 'recruiter' && !Comissoes.isDate(sd)) return toast('Informe a data de início do recrutador.', true);
     const ch = [], set = (k, v, label) => { if ((u[k] || '') !== v) { u[k] = v; ch.push(label); } };
+    if (!cli) set('startDate', sd, 'data de início');
     set('name', g('name'), 'nome'); set('email', email, 'e-mail'); set('phone', ph.d, 'telefone'); if (!cli) set('doc', doc, 'CPF/CNPJ');
     if (u.role !== role) { u.role = role; ch.push('perfil'); }
     if ((u.active !== false) !== active) { u.active = active; ch.push(active ? 'reativado' : 'desativado'); }
@@ -2425,9 +2481,9 @@ db = Persist.load();
 if (!db || !db.users || !db.jobs) { db = seedDB(); }
 ['invites', 'requests', 'delReqs', 'audit', 'outbox', 'evals', 'notifs'].forEach(k => { if (!db[k]) db[k] = []; });
 if (!db.cargos) db.cargos = defaultCargos();
-ensureGoalsDb(); backfillActorIds(); closeMonths();
+ensureGoalsDb(); ensurePayDb(); backfillActorIds(); closeMonths();
 save();
 window.addEventListener('hashchange', () => { closeModal(); actions.closeSide(); render(); });
 render();
-window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
+window.__V = { get db() { return db; }, ui, render, route, go, actions, forms, moveApp, AI, seedDB, Auth, parse, fin: { ensurePayDb, payParams, savePayParams, finAccess }, metas: { ensureGoalsDb, backfillActorIds, GOAL_METRICS, periodBounds, monthKey, goalMetricValue, suggestTarget, goalProgress, GOAL_STATUS_LABEL, goalsFor, saveGoal, removeGoal, bumpGoal, copyMonthGoals, seedGoals, lateGoalsFor, goalIsCurrent, closeMonths, goalHistory } };
 })();
